@@ -33,7 +33,7 @@ type BaseModelInterface[T any] interface {
 	LoadData(cond SearchConditon, preloads ...PreloadsType) (*T, error)                                      // 根据搜索条件加载数据
 	LoadById(id uint64) (*T, error)                                                                          // 根据Id加载数据
 	LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error)                   // 根据业务编码查询数据
-	GetById(Id uint64) (*T, error)                                                                           // 根据Id查询数据
+	GetById(Id uint64, preloads ...PreloadsType) (*T, error)                                                 // 根据Id查询数据
 	GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                           // 根据Id查询数据
 	Repair() error                                                                                           // 修复数据
 	Count(SearchConditon, ...SearchConditon) (int64, error)                                                  // 统计数据条数
@@ -186,11 +186,11 @@ func (b *BaseModel[T]) LoadByBusinessCode(filedName, filedValue string, preloads
 }
 
 // 根据Id查询数据
-func (b *BaseModel[T]) GetById(Id uint64) (*T, error) {
+func (b *BaseModel[T]) GetById(Id uint64, preloads ...PreloadsType) (*T, error) {
 	// 预加载查询
 	db := b.Db
-	if len(b.Preloads) > 0 {
-		for key, vals := range b.Preloads {
+	if len(preloads) > 0 {
+		for key, vals := range preloads[0] {
 			// 组合where条件和order条件
 			vals = append(vals, func(db *gorm.DB) *gorm.DB {
 				return db.Order("id asc")
@@ -294,7 +294,7 @@ func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string
 		dbMap[val] = struct{}{}
 	}
 	for i, v := range values {
-		res[i] = false // 可省略，因默认值为false
+		res[i] = false
 		if _, exists := dbMap[v]; exists {
 			res[i] = true
 		}
