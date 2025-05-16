@@ -23,30 +23,32 @@ type RecordLogFunc = func(ctx *gin.Context, operatorType, operatorTypeName strin
 
 // 充血模型基础接口
 type BaseModelInterface[T any] interface {
-	TableName() string                                                                                       // 表名
-	Tx() *gorm.DB                                                                                            // 获取事务DB
-	Transaction(fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error                                    // 事务处理
-	SetData(data any) (*T, error)                                                                            // 设置数据
-	Create() (*T, error)                                                                                     // 新增数据
-	Update() (*T, error)                                                                                     // 更新数据
-	Del(ids ...uint64) error                                                                                 // 删除数据
-	LoadData(cond SearchConditon, preloads ...PreloadsType) (*T, error)                                      // 根据搜索条件加载数据
-	LoadById(id uint64) (*T, error)                                                                          // 根据Id加载数据
-	LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error)                   // 根据业务编码查询数据
-	GetById(Id uint64, preloads ...PreloadsType) (*T, error)                                                 // 根据Id查询数据
-	GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                           // 根据Id查询数据
-	Repair() error                                                                                           // 修复数据
-	Count(SearchConditon, ...SearchConditon) (int64, error)                                                  // 统计数据条数
-	List(SearchConditon, ...SearchConditon) ([]*T, error)                                                    // 查询列表数据
-	Import(data any) error                                                                                   // 导入数据
-	Export(cond SearchConditon) (string, error)                                                              // 导出数据
-	Complete() error                                                                                         // 完善数据
-	CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error)                                    // 检查业务编码是否重复
-	CheckBusinessCodesExist(filedName string, values []string, more ...SearchConditon) (map[int]bool, error) // 批量检查业务编码是否存在
-	CheckUniqueKeysRepeat(filedNames []string, values []string, withOutIds ...uint64) (bool, error)          // 检查唯一键是否重复
-	CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error) // 批量检查唯一键是否重复
-	EventExecution(initStatus, event, eventZhName string, callbacks ...EventCallback[T]) error               // 执行事件 | 注意状态机一定要配置after_event回调
-	ReInit(baseModel *BaseModel[T]) error                                                                    // 重新初始化
+	TableName() string                                                                                                               // 表名
+	Tx() *gorm.DB                                                                                                                    // 获取事务DB
+	Transaction(fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error                                                            // 事务处理
+	SetData(data any) (*T, error)                                                                                                    // 设置数据
+	Create() (*T, error)                                                                                                             // 新增数据
+	Update() (*T, error)                                                                                                             // 更新数据
+	LoadData(SearchConditon) (*T, error)                                                                                             // 加载数据
+	LoadById(id uint64) (*T, error)                                                                                                  // 根据Id加载数据
+	LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error)                                           // 根据业务编码查询数据
+	GetById(Id uint64) (*T, error)                                                                                                   // 根据Id查询数据
+	GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                                                   // 根据Id查询数据
+	Repair() error                                                                                                                   // 修复数据
+	Count(SearchConditon, ...SearchConditon) (int64, error)                                                                          // 统计数据条数
+	List(SearchConditon, ...SearchConditon) ([]*T, error)                                                                            // 查询列表数据
+	Import(data any) error                                                                                                           // 导入数据
+	Export(cond SearchConditon) (string, error)                                                                                      // 导出数据
+	Complete() error                                                                                                                 // 完善数据
+	Del(ids ...uint64) error                                                                                                         // 删除数据
+	CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error)                                                            // 检查业务编码是否重复
+	CheckBusinessCodesExist(filedName string, values []string, more ...SearchConditon) (map[int]bool, error)                         // 批量检查业务编码是否存在
+	CheckUniqueKeysRepeat(filedNames []string, values []string, withOutIds ...uint64) (bool, error)                                  // 检查唯一键是否重复
+	CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                         // 批量检查唯一键是否重复
+	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
+	ReInit(baseModel *BaseModel[T]) error                                                                                            // 重置模型中的Context和Db
+	InitStateMachine(initStatus string, events []fsm.EventDesc, afterEvent fsm.Callback, callbacks ...map[string]fsm.Callback) error // 初始化状态机
+	EventExecution(initStatus, event, eventZhName string) error                                                                      // 执行事件
 }
 
 // 公共模型属性
@@ -343,43 +345,47 @@ func (b *BaseModel[T]) CheckUniqueKeysRepeatBatch(filedNames []string, values []
 	return res, nil
 }
 
+// ---------- 事件驱动相关 ----------
+
+// 初始化状态机
+func (b *BaseModel[T]) InitStateMachine(initStatus string, events []fsm.EventDesc, afterEvent fsm.Callback, callbacks ...map[string]fsm.Callback) error {
+	finelCallbacks := make(map[string]fsm.Callback)
+	finelCallbacks["after_event"] = afterEvent
+	if len(callbacks) > 0 {
+		for _, item := range callbacks {
+			for k, v := range item {
+				finelCallbacks[k] = v
+			}
+		}
+	}
+	b.StatesMachine = fsm.NewFSM(initStatus, events, finelCallbacks)
+	return nil
+}
+
 // 执行某个事件
 type EventCallback[T any] func() error
 
-func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string, callbacks ...EventCallback[T]) error {
-	// 1.校验状态机是否已注册
+func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) error {
+	// 0. 前置校验
 	if b.StatesMachine == nil {
 		return fmt.Errorf("状态机未注册,请开发检查")
 	}
-
-	// 2. todo 检查有没有配置  after_event 回调
-
-	// 3. 重新设置初始状态
-	b.StatesMachine.SetState(initStatus)
-
-	// 4. 判断目标状态和当前状态是否一致,跳过
-
-	// 校验是否允许执行当前事件
-	if !b.StatesMachine.Can(event) {
-		return fmt.Errorf("业务实体[%s]当前状态[%s],不允许执行事件[%s],请开发检查", b.TableName, initStatus, eventZhName)
-	}
-
 	if b.Entity == nil {
 		return fmt.Errorf("BaseModel中业务实体为空,需要在实例化候传入,请开发检查")
+	}
+
+	// 1. 重新设置初始状态
+	b.StatesMachine.SetState(initStatus)
+
+	// 2. 校验是否允许执行当前事件
+	if !b.StatesMachine.Can(event) {
+		return fmt.Errorf("业务实体[%s]当前状态[%s],不允许执行事件[%s],请开发检查", b.TableName, initStatus, eventZhName)
 	}
 
 	// 记录旧数据
 	oldData := b.Entity
 
-	// 执行前置回调[0]
-	if len(callbacks) >= 1 {
-		err := callbacks[0]()
-		if err != nil {
-			return fmt.Errorf("业务实体[%s]执行事件[%s]前置回调失败,请开发检查", b.TableName, eventZhName)
-		}
-	}
-
-	// 执行事件 && 触发钩子函数对实体进行状态修改 | 注意状态没有变化是允许的
+	// 执行事件 | 注意状态没有变化是允许的
 	ctx := b.Ctx.Request.Context()
 	err := b.StatesMachine.Event(ctx, event)
 	noTransitionError := fsm.NoTransitionError{Err: nil}
@@ -387,18 +393,12 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string, cal
 		return fmt.Errorf("业务实体[%s]执行事件[%s]失败[%s],请开发检查", b.TableName, eventZhName, err.Error())
 	}
 
-	// 执行后置回调[1]
-	if len(callbacks) >= 2 {
-		err := callbacks[1]()
-		if err != nil {
-			return fmt.Errorf("业务实体[%s]执行事件[%s]后置回调失败,请开发检查", b.TableName, eventZhName)
-		}
-	}
-
-	// 保存状态
-	err = b.Tx().Save(b.Entity).Error
+	// 保存状态 | 状态没有变化时候,不保存
 	if err != nil {
-		return fmt.Errorf("业务实体[%s]保存最终状态失败,请开发检查", b.TableName)
+		err = b.Tx().Save(b.Entity).Error
+		if err != nil {
+			return fmt.Errorf("业务实体[%s]保存最终状态失败,请开发检查", b.TableName)
+		}
 	}
 
 	// 记录操作日志
