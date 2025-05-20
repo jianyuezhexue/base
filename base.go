@@ -21,6 +21,7 @@ var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
 type SearchCondition = func(db *gorm.DB) *gorm.DB
 type PreloadsType = map[string][]any
 type RecordLogFunc = func(ctx *gin.Context, operatorType, operatorTypeName string, oldData, newData any) error
+type ValidateateFunc = func(data any) error
 
 // 充血模型基础接口
 type BaseModelInterface[T any] interface {
@@ -28,7 +29,7 @@ type BaseModelInterface[T any] interface {
 	Tx() *gorm.DB                                                                                                                    // 获取事务DB
 	Transaction(fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error                                                            // 事务处理
 	SetData(data any) (*T, error)                                                                                                    // 设置数据
-	Validate(datas ...*T) ([]error, error)                                                                                           // 数据校验
+	Validate(fn ValidateateFunc, datas ...*T) ([]error, error)                                                                       // 数据校验
 	Create() (*T, error)                                                                                                             // 新增数据
 	Update() (*T, error)                                                                                                             // 更新数据
 	LoadData(cond SearchCondition, preloads ...PreloadsType) (*T, error)                                                             // 加载数据
@@ -158,6 +159,42 @@ func (b *BaseModel[T]) SetData(data any) (*T, error) {
 	}
 
 	return b.Entity, nil
+}
+
+// Validate 数据校验
+func (b *BaseModel[T]) Validate(fn ValidateateFunc, datas ...*T) ([]error, error) {
+	// 数据判断 | 不传参就校验当前对象
+	if len(datas) == 0 {
+		datas = append(datas, b.Entity)
+	}
+	errMap := make(map[int][]error, len(datas))
+
+	// 校验逻辑
+	for index, data := range datas {
+		err := fn(data)
+		if err != nil {
+			errMap[index] = append(errMap[index], err)
+		}
+	}
+
+	// 统一汇总所有错误信息
+	res := make([]error, len(datas))
+	hasErr := false
+	for index, itemErrors := range errMap {
+		if len(itemErrors) > 0 {
+			hasErr = true
+			finelErrMsgs := []string{}
+			for _, itemError := range itemErrors {
+				finelErrMsgs = append(finelErrMsgs, itemError.Error())
+			}
+			res[index] = errors.New(strings.Join(finelErrMsgs, ";"))
+		}
+	}
+	if !hasErr {
+		res = make([]error, 0)
+	}
+
+	return res, nil
 }
 
 // Create 创建数据

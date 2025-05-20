@@ -40,13 +40,6 @@ func NewSalesOrderEntity(ctx *gin.Context, opt ...base.Option[SalesOrderEntity])
 	return entity
 }
 
-// Validate 数据校验
-func (m *SalesOrderEntity) Validate(datas ...*SalesOrderEntity) ([]error, error) {
-	// 自定义校验逻辑
-
-	return nil, nil
-}
-
 // Repair 数据修复
 func (m *SalesOrderEntity) Repair() error {
 	// 自定义数据修复逻辑
