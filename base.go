@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jianyuezhexue/base/db"
+	"github.com/jianyuezhexue/base/tool"
 	"github.com/looplab/fsm"
 	"gorm.io/gorm"
 )
@@ -17,7 +18,7 @@ import (
 var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
 
 // 底层类型约定
-type SearchConditon = func(db *gorm.DB) *gorm.DB
+type SearchCondition = func(db *gorm.DB) *gorm.DB
 type PreloadsType = map[string][]any
 type RecordLogFunc = func(ctx *gin.Context, operatorType, operatorTypeName string, oldData, newData any) error
 
@@ -27,22 +28,21 @@ type BaseModelInterface[T any] interface {
 	Tx() *gorm.DB                                                                                                                    // 获取事务DB
 	Transaction(fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error                                                            // 事务处理
 	SetData(data any) (*T, error)                                                                                                    // 设置数据
+	Validate(datas ...*T) ([]error, error)                                                                                           // 数据校验
 	Create() (*T, error)                                                                                                             // 新增数据
 	Update() (*T, error)                                                                                                             // 更新数据
-	LoadData(SearchConditon) (*T, error)                                                                                             // 加载数据
-	LoadById(id uint64) (*T, error)                                                                                                  // 根据Id加载数据
+	LoadData(cond SearchCondition, preloads ...PreloadsType) (*T, error)                                                             // 加载数据
+	LoadById(id uint64, preloads ...PreloadsType) (*T, error)                                                                        // 根据Id加载数据
 	LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error)                                           // 根据业务编码查询数据
-	GetById(Id uint64) (*T, error)                                                                                                   // 根据Id查询数据
+	GetById(Id uint64, preloads ...PreloadsType) (*T, error)                                                                         // 根据Id查询数据
 	GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                                                   // 根据Id查询数据
 	Repair() error                                                                                                                   // 修复数据
-	Count(SearchConditon, ...SearchConditon) (int64, error)                                                                          // 统计数据条数
-	List(SearchConditon, ...SearchConditon) ([]*T, error)                                                                            // 查询列表数据
-	Import(data any) error                                                                                                           // 导入数据
-	Export(cond SearchConditon) (string, error)                                                                                      // 导出数据
+	Count(SearchCondition, ...SearchCondition) (int64, error)                                                                        // 统计数据条数
+	List(SearchCondition, ...SearchCondition) ([]*T, error)                                                                          // 查询列表数据
 	Complete() error                                                                                                                 // 完善数据
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error)                                                            // 检查业务编码是否重复
-	CheckBusinessCodesExist(filedName string, values []string, more ...SearchConditon) (map[int]bool, error)                         // 批量检查业务编码是否存在
+	CheckBusinessCodesExist(filedName string, values []string, more ...SearchCondition) (map[int]bool, error)                        // 批量检查业务编码是否存在
 	CheckUniqueKeysRepeat(filedNames []string, values []string, withOutIds ...uint64) (bool, error)                                  // 检查唯一键是否重复
 	CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                         // 批量检查唯一键是否重复
 	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
@@ -53,35 +53,46 @@ type BaseModelInterface[T any] interface {
 
 // 公共模型属性
 type BaseModel[T any] struct {
-	Id                    uint64           `json:"id" uri:"id" search:"exact" gorm:"primarykey"` // 主键
-	CreatedAt             db.LocalTime     `json:"createdAt" search:"gte"`                       // 创建时间
-	UpdatedAt             db.LocalTime     `json:"updatedAt" search:"lte"`                       // 更新时间
-	DeletedAt             gorm.DeletedAt   `json:"-" gorm:"index" search:"-"`                    // 删除标记
-	CreateBy              string           `json:"createBy" search:"eq"`                         // 创建人
-	UpdateBy              string           `json:"updateBy" search:"eq"`                         // 更新人
-	CreateByName          string           `json:"createByName" search:"eq"`                     // 创建人名称
-	UpdateByName          string           `json:"updateByName" search:"eq"`                     // 更新人名称
-	Db                    *gorm.DB         `json:"-" gorm:"-" search:"-"`                        // 数据库连接
-	Ctx                   *gin.Context     `json:"-" gorm:"-" search:"-"`                        // 上下文
-	Preloads              map[string][]any `json:"-" gorm:"-" search:"-"`                        // 预加载
-	CurrTime              time.Time        `json:"-" gorm:"-" search:"-"`                        // 当前时间
-	TableName             string           `json:"-" gorm:"-" search:"-"`                        // 表名
-	OperatorId            string           `json:"-" gorm:"-" search:"-"`                        // 操作日志操作人id
-	OperatorName          string           `json:"-" gorm:"-" search:"-"`                        // 操作日志操作人
-	CustomerOrder         string           `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 自定义排序规则
-	ParamData             any              `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 参数数据
-	PermissionConditons   []SearchConditon `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 权限条件
-	Entity                *T               `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 实体对象
-	StatesMachine         *fsm.FSM         `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 状态机
-	DefaultSearchConditon SearchConditon   `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 默认搜索条件
-	RecordLogFunc         RecordLogFunc    `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 记录日志函数
+	Id                  uint64            `json:"id" uri:"id" search:"exact" gorm:"primarykey"` // 主键
+	CreatedAt           db.LocalTime      `json:"createdAt" search:"gte"`                       // 创建时间
+	UpdatedAt           db.LocalTime      `json:"updatedAt" search:"lte"`                       // 更新时间
+	DeletedAt           gorm.DeletedAt    `json:"-" gorm:"index" search:"-"`                    // 删除标记
+	CreateBy            string            `json:"createBy" search:"eq"`                         // 创建人
+	UpdateBy            string            `json:"updateBy" search:"eq"`                         // 更新人
+	CreateByName        string            `json:"createByName" search:"eq"`                     // 创建人名称
+	UpdateByName        string            `json:"updateByName" search:"eq"`                     // 更新人名称
+	Db                  *gorm.DB          `json:"-" gorm:"-" search:"-"`                        // 数据库连接
+	Ctx                 *gin.Context      `json:"-" gorm:"-" search:"-"`                        // 上下文
+	Preloads            map[string][]any  `json:"-" gorm:"-" search:"-"`                        // 预加载
+	CurrTime            time.Time         `json:"-" gorm:"-" search:"-"`                        // 当前时间
+	TableName           string            `json:"-" gorm:"-" search:"-"`                        // 表名
+	OperatorId          string            `json:"-" gorm:"-" search:"-"`                        // 操作日志操作人id
+	OperatorName        string            `json:"-" gorm:"-" search:"-"`                        // 操作日志操作人
+	CustomerOrder       string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 自定义排序规则
+	ParamData           any               `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 参数数据
+	PermissionConditons []SearchCondition `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 权限条件
+	Entity              *T                `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 实体对象
+	StatesMachine       *fsm.FSM          `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 状态机
+	RecordLogFunc       RecordLogFunc     `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`      // 记录日志函数
+}
+
+// 初始化模型
+func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity *T) BaseModel[T] {
+	baseModel := BaseModel[T]{
+		Ctx:       ctx,
+		Db:        db,
+		TableName: tableName,
+		Entity:    entity,
+		CurrTime:  time.Now().Local(),
+	}
+	return baseModel
 }
 
 // ---------- OPTIONS函数 ----------
 type Option[T any] func(*BaseModel[T])
 
 // 初始化带上权限条件
-func WithPermissionConditons[T any](conds ...SearchConditon) Option[T] {
+func WithPermissionConditons[T any](conds ...SearchCondition) Option[T] {
 	return func(b *BaseModel[T]) {
 		b.PermissionConditons = conds
 	}
@@ -106,6 +117,7 @@ func WithCustomerOrder[T any](order string) Option[T] {
 // 记录操作日志
 const LogTypeCreate string = "create"
 const LogTypeUpdate string = "update"
+const LogTypeDelete string = "delete"
 
 func (b *BaseModel[T]) RecordLog(operatorType, operatorTypeName string, oldData, newData any) error {
 	if b.RecordLogFunc == nil {
@@ -118,22 +130,140 @@ func (b *BaseModel[T]) RecordLog(operatorType, operatorTypeName string, oldData,
 	return nil
 }
 
-// 构造查询条件 | 这里不能传指针注意 | 废弃中，直接使用db.MakeCondition()
-func (b *BaseModel[T]) MakeConditon(data any) SearchConditon {
+// 构造查询条件 | 这里不能传指针注意
+func (b *BaseModel[T]) MakeConditon(data any) SearchCondition {
 	return db.MakeCondition(data)
 }
 
 // 清空搜索条件
 // 清除分页和偏移量
-func (b *BaseModel[T]) ClearOffset() SearchConditon {
+func (b *BaseModel[T]) ClearOffset() SearchCondition {
 	return func(db *gorm.DB) *gorm.DB {
 		db = db.Limit(-1).Offset(-1)
 		return db
 	}
 }
 
-// 根据Id加载数据 LoadById(id uint64) (*T, error)
-func (b *BaseModel[T]) LoadById(id uint64) (*T, error) {
+// SetData 设置数据
+func (b *BaseModel[T]) SetData(data any) (*T, error) {
+	// 前置校验
+	if b.Entity == nil {
+		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	}
+
+	// 初始化实体对象
+	err := tool.CopyDeep(b.Entity, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Entity, nil
+}
+
+// Create 创建数据
+func (b *BaseModel[T]) Create() (*T, error) {
+	// 前置校验
+	if b.Entity == nil {
+		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	}
+
+	// 执行创建操作
+	err := b.Tx().Create(b.Entity).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 记录日志
+	err = b.RecordLog(LogTypeCreate, "新增", new(T), b.Entity)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Entity, nil
+}
+
+// 更新数据
+func (b *BaseModel[T]) Update() (*T, error) {
+	// 前置校验
+	if b.Entity == nil {
+		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	}
+
+	// 执行更新操作
+	err := b.Tx().Save(b.Entity).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 记录日志
+	err = b.RecordLog(LogTypeUpdate, "修改", b.Entity, b.Entity)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Entity, nil
+}
+
+// 删除数据
+func (b *BaseModel[T]) Del(ids ...uint64) error {
+	// 前置校验
+	if b.Entity == nil {
+		return errors.New("初始化实体时候没有传进来,请开发检查")
+	}
+
+	// 执行删除操作
+	err := b.Tx().Delete(b.Entity).Error
+	if err != nil {
+		return err
+	}
+
+	// 记录日志
+	err = b.RecordLog(LogTypeDelete, "删除", b.Entity, new(T))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// 统计数据条数 | 搜索条件: 权限条件,搜索条件,拓展搜索条件
+func (b *BaseModel[T]) Count(cond SearchCondition, extra ...SearchCondition) (int64, error) {
+	var total int64
+
+	model := new(T)
+	err := b.Db.Debug().Model(model).Scopes(b.PermissionConditons...).Scopes(cond, b.ClearOffset()).Scopes(extra...).Count(&total).Error
+	if err != nil {
+		return 0, err
+	}
+	return total, err
+}
+
+// 查询列表数据
+func (b *BaseModel[T]) List(cond SearchCondition, extra ...SearchCondition) ([]*T, error) {
+
+	// 组合查询条件
+	db := b.Db.Debug().Scopes(b.PermissionConditons...).Scopes(cond).Scopes(extra...)
+
+	// 组合排序
+	if b.CustomerOrder != "" {
+		db = db.Order(b.CustomerOrder)
+	} else {
+		db = db.Order("id desc")
+	}
+
+	// 执行查询
+	var list []*T
+	err := db.Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return list, err
+}
+
+// 加载数据
+func (b *BaseModel[T]) LoadData(cond SearchCondition, preloads ...PreloadsType) (*T, error) {
+
 	// 前置校验
 	if b.Entity == nil {
 		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
@@ -141,8 +271,38 @@ func (b *BaseModel[T]) LoadById(id uint64) (*T, error) {
 
 	// 预加载查询
 	db := b.Db
-	if len(b.Preloads) > 0 {
-		for key, vals := range b.Preloads {
+	if len(preloads) > 0 {
+		for key, vals := range preloads[0] {
+			// 组合where条件和order条件
+			vals = append(vals, func(db *gorm.DB) *gorm.DB {
+				return db.Order("id asc")
+			})
+			db = db.Preload(key, vals...)
+		}
+	}
+
+	err := db.Scopes(cond).First(b.Entity).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("查询的数据不存在,请检查")
+		}
+		return nil, err
+	}
+
+	return b.Entity, nil
+}
+
+// 根据Id加载数据 LoadById(id uint64) (*T, error)
+func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error) {
+	// 前置校验
+	if b.Entity == nil {
+		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	}
+
+	// 预加载查询
+	db := b.Db
+	if len(preloads) > 0 {
+		for key, vals := range preloads[0] {
 			// 组合where条件和order条件
 			vals = append(vals, func(db *gorm.DB) *gorm.DB {
 				return db.Order("id asc")
@@ -274,7 +434,7 @@ func (b *BaseModel[T]) CheckBusinessCodeRepeat(filedName, businessCode string) (
 }
 
 // 批量校验业务数据是否存在
-func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string, more ...SearchConditon) (map[int]bool, error) {
+func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string, more ...SearchCondition) (map[int]bool, error) {
 	res := make(map[int]bool)
 
 	// 控制数量
@@ -406,7 +566,7 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 	return nil
 }
 
-// ---------- 底层函数 ----------
+// ---------- 事务函数 ----------
 
 // 获取事务Db | 使用Tx()代替DB()方法,语义更清晰
 func (m *BaseModel[T]) Tx() *gorm.DB {
@@ -453,89 +613,111 @@ func (m *BaseModel[T]) IsInTransaction() bool {
 
 // 创建前钩子函数
 func (b *BaseModel[T]) BeforeCreate(tx *gorm.DB) (err error) {
-	if b.Ctx != nil {
-		// 自动维护创建人信息
-		userInfo, exise := b.Ctx.Get("identity")
-		if exise {
-			userInfo := userInfo.(map[string]any)
-			b.CreateBy = userInfo["UserName"].(string)
-			b.CreateByName = userInfo["NickName"].(string)
-			b.OperatorId = userInfo["UserName"].(string)
-			b.OperatorName = userInfo["NickName"].(string)
-			fmt.Println("用户信息", userInfo)
-		}
+
+	// 前置校验
+	if b.Ctx == nil {
+		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
 	}
 
-	return nil
-}
+	// 信息读取
+	currUserId, exise := b.Ctx.Get("currUserId")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
+	}
+	currUserName, exise := b.Ctx.Get("currUserName")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
+	}
 
-// 创建后钩子函数
-func (b *BaseModel[T]) AfterCreate(tx *gorm.DB) (err error) {
+	// 自动维护创建人信息
+	b.CreateBy = currUserId.(string)
+	b.CreateByName = currUserName.(string)
+	b.OperatorId = currUserId.(string)
+	b.OperatorName = currUserName.(string)
 	return nil
 }
 
 // 更新前钩子函数
 func (b *BaseModel[T]) BeforeUpdate(tx *gorm.DB) (err error) {
-	if b.Ctx != nil {
-		// 自动维护更新人信息
-		userInfo, exise := b.Ctx.Get("identity")
-		if exise {
-			userInfo := userInfo.(map[string]any)
-			b.UpdateBy = userInfo["UserName"].(string)
-			b.UpdateByName = userInfo["NickName"].(string)
-			b.OperatorId = userInfo["UserName"].(string)
-			b.OperatorName = userInfo["NickName"].(string)
-		}
+	// 前置校验
+	if b.Ctx == nil {
+		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
 	}
 
+	// 信息读取
+	currUserId, exise := b.Ctx.Get("currUserId")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
+	}
+	currUserName, exise := b.Ctx.Get("currUserName")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
+	}
+
+	// 自动维护创建人信息
+	b.UpdateBy = currUserId.(string)
+	b.UpdateByName = currUserName.(string)
+	b.OperatorId = currUserId.(string)
+	b.OperatorName = currUserName.(string)
 	return nil
 }
 
 // Save前钩子函数
 func (b *BaseModel[T]) BeforeSave(tx *gorm.DB) (err error) {
-	if b.Ctx != nil {
-		// 自动维护更新人信息
-		userInfo, exise := b.Ctx.Get("identity")
-		if exise {
-			userInfo := userInfo.(map[string]any)
-			if b.Id == 0 { // 新建
-				b.CreateBy = userInfo["UserName"].(string)
-				b.CreateByName = userInfo["NickName"].(string)
-			} else { // 更新
-				b.UpdateBy = userInfo["UserName"].(string)
-				b.UpdateByName = userInfo["NickName"].(string)
-			}
-			b.OperatorId = userInfo["UserName"].(string)
-			b.OperatorName = userInfo["NickName"].(string)
-		}
+	// 前置校验
+	if b.Ctx == nil {
+		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
 	}
-	return nil
-}
 
-// 更新后钩子函数
-func (b *BaseModel[T]) AfterUpdate(tx *gorm.DB) (err error) {
+	// 信息读取
+	currUserId, exise := b.Ctx.Get("currUserId")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
+	}
+	currUserName, exise := b.Ctx.Get("currUserName")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
+	}
+
+	// 自动维护创建人信息
+	if b.Id == 0 {
+		// 新建
+		b.CreateBy = currUserId.(string)
+		b.CreateByName = currUserName.(string)
+	}
+	if b.Id != 0 {
+		// 更新
+		b.UpdateBy = currUserId.(string)
+		b.UpdateByName = currUserName.(string)
+	}
+	b.OperatorId = currUserId.(string)
+	b.OperatorName = currUserName.(string)
+
 	return nil
 }
 
 // 删除前钩子函数
 func (b *BaseModel[T]) BeforeDelete(tx *gorm.DB) (err error) {
-	if b.Ctx != nil {
-		// 自动维护更新人信息
-		userInfo, exise := b.Ctx.Get("identity")
-		if exise {
-			userInfo := userInfo.(map[string]any)
-			b.UpdateBy = userInfo["UserName"].(string)
-			b.UpdateByName = userInfo["NickName"].(string)
-		}
+	// 前置校验
+	if b.Ctx == nil {
+		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
 	}
-	// 处理审计日志信息
 
-	return nil
-}
+	// 信息读取
+	currUserId, exise := b.Ctx.Get("currUserId")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
+	}
+	currUserName, exise := b.Ctx.Get("currUserName")
+	if !exise {
+		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
+	}
 
-// 删除后钩子函数
-func (b *BaseModel[T]) AfterDelete(tx *gorm.DB) (err error) {
-	// 异步处理审计日志
+	// 自动维护创建人信息
+	b.UpdateBy = currUserId.(string)
+	b.UpdateByName = currUserName.(string)
+	b.OperatorId = currUserId.(string)
+	b.OperatorName = currUserName.(string)
 
 	return nil
 }
