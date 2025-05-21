@@ -123,13 +123,6 @@ const LogTypeDelete string = "delete"
 
 func (b *BaseModel[T]) RecordLog(operatorType, operatorTypeName string, oldData, newData any) error {
 	// todo
-	// if b.RecordLogFunc == nil {
-	// 	return errors.New("记录日志函数未初始化")
-	// }
-	// err := b.RecordLogFunc(b.Ctx, operatorType, operatorTypeName, oldData, newData)
-	// if err != nil {
-	// 	return err
-	// }
 
 	return nil
 }
@@ -172,7 +165,7 @@ func (b *BaseModel[T]) Create() (*T, error) {
 	}
 
 	// 执行创建操作
-	err := b.Tx().Omit("update_by", "update_by_name").Create(b.Entity).Error
+	err := b.Tx().Omit("update_at", "update_by", "update_by_name").Create(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +187,7 @@ func (b *BaseModel[T]) Update() (*T, error) {
 	}
 
 	// 执行更新操作
-	err := b.Tx().Omit("create_by", "create_by_name").Save(b.Entity).Error
+	err := b.Tx().Omit("created_at", "create_by", "create_by_name").Save(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
@@ -617,17 +610,18 @@ func (m *BaseModel[T]) IsInTransaction() bool {
 
 // 创建前钩子函数
 func (b *BaseModel[T]) BeforeCreate(tx *gorm.DB) (err error) {
-	// 前置校验
-	if b.Ctx == nil {
-		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
+
+	ctx, ok := tx.Statement.Context.(*gin.Context)
+	if !ok {
+		return fmt.Errorf("DB中的Context断言gin.Context失败,王杰检查")
 	}
 
 	// 信息读取
-	currUserId, exise := b.Ctx.Get("currUserId")
+	currUserId, exise := ctx.Get("currUserId")
 	if !exise {
 		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
 	}
-	currUserName, exise := b.Ctx.Get("currUserName")
+	currUserName, exise := ctx.Get("currUserName")
 	if !exise {
 		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
 	}
