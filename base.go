@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jianyuezhexue/base/db"
+	"github.com/jianyuezhexue/base/localCache"
 	"github.com/jianyuezhexue/base/tool"
 	"github.com/looplab/fsm"
 	"gorm.io/gorm"
@@ -73,17 +74,32 @@ type BaseModel[T any] struct {
 	PermissionConditons []SearchCondition `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 权限条件
 	Entity              *T                `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 实体对象
 	StatesMachine       *fsm.FSM          `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 状态机
+	entityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
 }
 
 // 初始化模型
 func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity *T) BaseModel[T] {
+	currTime := time.Now().Local()
+
+	// todo key的前缀使用TraceId未来可实现的功能更多
+	entityKey := fmt.Sprintf("%v_%s", currTime.Nanosecond(), tableName)
+
 	baseModel := BaseModel[T]{
 		Ctx:       ctx,
 		Db:        db,
 		TableName: tableName,
 		Entity:    entity,
-		CurrTime:  time.Now().Local(),
+		entityKey: entityKey,
+		CurrTime:  currTime,
 	}
+
+	// 将业务模型放到本地缓存中
+	localCache := localCache.NewCache()
+	ctx.Set("entityKey", entityKey)
+
+	// todo 这里优化过期时间 以及 设计如何让本地缓存随着接口返回，将实体主动删除
+	// 思路一：baseModel 提供给一个钩子函数，传入Context，读出entityKey 发起删除缓存动作，在中间件中，接口结束时候调用
+	localCache.Set(entityKey, entity, 10*time.Minute)
 
 	// 从Ctx中读取用户信息
 	userId, _ := ctx.Get("currUserId")
@@ -98,7 +114,6 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 	dbContet := ctx.Request.Context()
 	dbContet = context.WithValue(dbContet, "currUserId", userId)
 	dbContet = context.WithValue(dbContet, "currUserName", userName)
-	dbContet = context.WithValue(dbContet, "currTime", baseModel.CurrTime)
 	baseModel.Db.Statement.Context = dbContet
 
 	return baseModel
