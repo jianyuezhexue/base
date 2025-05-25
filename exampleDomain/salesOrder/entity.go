@@ -30,11 +30,7 @@ func (m *SalesOrderEntity) TableName() string {
 // 实例化实体业务模型
 func NewSalesOrderEntity(ctx *gin.Context, opt ...base.Option[SalesOrderEntity]) SalesOrderInterface {
 	entity := &SalesOrderEntity{}
-	// entity.BaseModel = base.NewBaseModel(ctx, db.InitDb(), entity.TableName(), entity)
-	entity.BaseModel.Ctx = ctx
-	entity.BaseModel.Db = db.InitDb()
-	entity.BaseModel.TableName = entity.TableName()
-	entity.BaseModel.Entity = entity
+	entity.BaseModel = base.NewBaseModel(ctx, db.InitDb(), entity.TableName(), entity)
 
 	// 自定义配置选项
 	if len(opt) > 0 {
@@ -42,7 +38,6 @@ func NewSalesOrderEntity(ctx *gin.Context, opt ...base.Option[SalesOrderEntity])
 			fc(&entity.BaseModel)
 		}
 	}
-
 	return entity
 }
 

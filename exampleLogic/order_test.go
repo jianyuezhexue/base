@@ -3,6 +3,7 @@ package examplelogic
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 // 新增接口
 func TestCreate(t *testing.T) {
 	// 0. 模拟数据
-	ctx := &gin.Context{}
+	ctx := &gin.Context{Request: &http.Request{}}
 	ctx.Set("currUserId", "110")
 	ctx.Set("currUserName", "张三")
 
@@ -57,9 +58,9 @@ func TestCreate(t *testing.T) {
 	err = salesOrderEntity.Transaction(func(tx *gorm.DB) error {
 
 		// 1. 新增数据
-		_, err := salesOrderEntity.Create()
-		if err != nil {
-			return err
+		_, err2 := salesOrderEntity.Create()
+		if err2 != nil {
+			return err2
 		}
 
 		// 2. more...

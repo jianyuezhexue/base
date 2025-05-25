@@ -1,6 +1,7 @@
 package base
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -84,8 +85,18 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 		CurrTime:  time.Now().Local(),
 	}
 
+	// 从Ctx中读取用户信息
+	userId, _ := ctx.Get("currUserId")
+	userName, _ := ctx.Get("currUserName")
+	baseModel.OperatorId = fmt.Sprintf("%v", userId)
+	baseModel.OperatorName = fmt.Sprintf("%v", userName)
+
 	// 在db中预埋Context
-	baseModel.Db.Statement.Context = ctx
+	dbContet := ctx.Request.Context()
+	dbContet = context.WithValue(dbContet, "currUserId", userId)
+	dbContet = context.WithValue(dbContet, "currUserName", userName)
+	dbContet = context.WithValue(dbContet, "currTime", baseModel.CurrTime)
+	baseModel.Db.Statement.Context = dbContet
 
 	return baseModel
 }
@@ -203,23 +214,18 @@ func (b *BaseModel[T]) Update() (*T, error) {
 
 // 删除数据
 func (b *BaseModel[T]) Del(ids ...uint64) error {
-	// 前置校验
-	if b.Entity == nil {
-		return errors.New("初始化实体时候没有传进来,请开发检查")
-	}
-
 	// 执行删除操作
-	err := b.Tx().Delete(b.Entity).Error
+	model := new(T)
+	err := b.Tx().Where("id in ?", ids).Delete(model).Error
 	if err != nil {
 		return err
 	}
 
-	// 记录日志
-	err = b.RecordLog(LogTypeDelete, "删除", b.Entity, new(T))
-	if err != nil {
-		return err
-	}
-
+	// // 记录日志
+	// err = b.RecordLog(LogTypeDelete, "删除", b.Entity, new(T))
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }
 
@@ -611,18 +617,15 @@ func (m *BaseModel[T]) IsInTransaction() bool {
 // 创建前钩子函数
 func (b *BaseModel[T]) BeforeCreate(tx *gorm.DB) (err error) {
 
-	ctx, ok := tx.Statement.Context.(*gin.Context)
-	if !ok {
-		return fmt.Errorf("DB中的Context断言gin.Context失败,王杰检查")
-	}
+	ctx := tx.Statement.Context
 
 	// 信息读取
-	currUserId, exise := ctx.Get("currUserId")
-	if !exise {
+	currUserId := ctx.Value("currUserId")
+	if currUserId == nil || currUserId == "" {
 		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
 	}
-	currUserName, exise := ctx.Get("currUserName")
-	if !exise {
+	currUserName := ctx.Value("currUserName")
+	if currUserName == nil || currUserName == "" {
 		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
 	}
 
@@ -636,18 +639,16 @@ func (b *BaseModel[T]) BeforeCreate(tx *gorm.DB) (err error) {
 
 // 更新前钩子函数
 func (b *BaseModel[T]) BeforeUpdate(tx *gorm.DB) (err error) {
-	// 前置校验
-	if b.Ctx == nil {
-		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
-	}
+
+	ctx := tx.Statement.Context
 
 	// 信息读取
-	currUserId, exise := b.Ctx.Get("currUserId")
-	if !exise {
+	currUserId := ctx.Value("currUserId")
+	if currUserId == nil || currUserId == "" {
 		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
 	}
-	currUserName, exise := b.Ctx.Get("currUserName")
-	if !exise {
+	currUserName := ctx.Value("currUserName")
+	if currUserName == nil || currUserName == "" {
 		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
 	}
 
@@ -661,18 +662,15 @@ func (b *BaseModel[T]) BeforeUpdate(tx *gorm.DB) (err error) {
 
 // Save前钩子函数
 func (b *BaseModel[T]) BeforeSave(tx *gorm.DB) (err error) {
-	// 前置校验
-	if b.Ctx == nil {
-		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
-	}
+	ctx := tx.Statement.Context
 
 	// 信息读取
-	currUserId, exise := b.Ctx.Get("currUserId")
-	if !exise {
+	currUserId := ctx.Value("currUserId")
+	if currUserId == nil || currUserId == "" {
 		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
 	}
-	currUserName, exise := b.Ctx.Get("currUserName")
-	if !exise {
+	currUserName := ctx.Value("currUserName")
+	if currUserName == nil || currUserName == "" {
 		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
 	}
 
@@ -695,18 +693,15 @@ func (b *BaseModel[T]) BeforeSave(tx *gorm.DB) (err error) {
 
 // 删除前钩子函数
 func (b *BaseModel[T]) BeforeDelete(tx *gorm.DB) (err error) {
-	// 前置校验
-	if b.Ctx == nil {
-		return fmt.Errorf("BaseModel中Ctx为空,需要在实例化候传入,请开发检查")
-	}
+	ctx := tx.Statement.Context
 
 	// 信息读取
-	currUserId, exise := b.Ctx.Get("currUserId")
-	if !exise {
+	currUserId := ctx.Value("currUserId")
+	if currUserId == nil || currUserId == "" {
 		return fmt.Errorf("Ctx中[currUserId]不存在,请开发检查")
 	}
-	currUserName, exise := b.Ctx.Get("currUserName")
-	if !exise {
+	currUserName := ctx.Value("currUserName")
+	if currUserName == nil || currUserName == "" {
 		return fmt.Errorf("Ctx中[currUserName]不存在,请开发检查")
 	}
 
