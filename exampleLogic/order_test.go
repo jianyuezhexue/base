@@ -71,6 +71,65 @@ func TestCreate(t *testing.T) {
 
 }
 
+// 更新接口
+func TestUpdate(t *testing.T) {
+	// 0. 模拟数据
+	ctx := &gin.Context{Request: &http.Request{}}
+	ctx.Set("currUserId", "120")
+	ctx.Set("currUserName", "李四")
+
+	// 模拟请求数据
+	reqData := &salesOrder.UpdateSalesOrder{
+		Id:           1,
+		OrderId:      fmt.Sprintf("SO%d", time.Now().UnixMicro()),
+		CustomerName: "张三",
+		Address:      "北京市朝阳区",
+		SalesOrderDetails: []*salesOrderDetail.UpdateSalesOrderDetail{
+			{
+				Id:            1,
+				SkuCode:       "SKU002",
+				ProductName:   "商品名称2",
+				BrandName:     "品牌名称2",
+				ModelType:     "型号2",
+				OrderQuantity: 2,
+			},
+		},
+	}
+
+	// -------------- 逻辑代码 ---------------
+
+	// 1. 实例化业务实体
+	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
+
+	// 2. 设置数据
+	_, err := salesOrderEntity.SetData(reqData)
+	assert.Nil(t, err)
+
+	// 3. 校验数据
+	err = salesOrderEntity.Validate()
+	assert.Nil(t, err)
+
+	// 4. 数据修复
+	err = salesOrderEntity.Repair()
+	assert.Nil(t, err)
+
+	// 5. 开启事务
+	err = salesOrderEntity.Transaction(func(tx *gorm.DB) error {
+
+		// 1. 新增数据
+		_, err2 := salesOrderEntity.Update()
+		if err2 != nil {
+			return err2
+		}
+
+		// 2. more...
+
+		return nil
+	})
+	assert.Nil(t, err)
+
+}
+
 // 列表接口
 func TestList(t *testing.T) {
 

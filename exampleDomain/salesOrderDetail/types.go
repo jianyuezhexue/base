@@ -12,13 +12,13 @@ type CreateSalesOrderDetail struct {
 
 // 更新销售订单
 type UpdateSalesOrderDetail struct {
-	Id            int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	OrderId       string `json:"orderId" gorm:"column:order_id;type:varchar(100);not null;default:''"`             // SO号
-	SkuCode       string `json:"skuCode" gorm:"column:sku_code;type:varchar(100);not null;default:''"`             // sku_code
-	ProductName   string `json:"productName" gorm:"column:product_name;type:varchar(100);not null;default:''"`     // sku名称
-	BrandName     string `json:"brandName" gorm:"column:brand_name;type:varchar(100);not null;default:''"`         // 品牌
-	ModelType     string `json:"modelType" gorm:"column:model_type;type:varchar(100);not null;default:''"`         // 型号
-	OrderQuantity string `json:"orderQuantity" gorm:"column:order_quantity;type:varchar(100);not null;default:''"` // 订单数量
+	Id            int     `json:"id" gorm:"primaryKey;autoIncrement"`
+	OrderId       string  `json:"orderId" gorm:"column:order_id;type:varchar(100);not null;default:''"`             // SO号
+	SkuCode       string  `json:"skuCode" gorm:"column:sku_code;type:varchar(100);not null;default:''"`             // sku_code
+	ProductName   string  `json:"productName" gorm:"column:product_name;type:varchar(100);not null;default:''"`     // sku名称
+	BrandName     string  `json:"brandName" gorm:"column:brand_name;type:varchar(100);not null;default:''"`         // 品牌
+	ModelType     string  `json:"modelType" gorm:"column:model_type;type:varchar(100);not null;default:''"`         // 型号
+	OrderQuantity float64 `json:"orderQuantity" gorm:"column:order_quantity;type:varchar(100);not null;default:''"` // 订单数量
 }
 
 // 搜索销售订单

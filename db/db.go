@@ -27,5 +27,5 @@ func InitDb() *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
-	return Db
+	return Db.Debug()
 }

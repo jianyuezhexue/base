@@ -198,7 +198,8 @@ func (b *BaseModel[T]) Update() (*T, error) {
 	}
 
 	// 执行更新操作
-	err := b.Tx().Omit("created_at", "create_by", "create_by_name").Save(b.Entity).Error
+	omitFileds := []string{"created_at", "create_by", "create_by_name"}
+	err := b.Tx().Omit(omitFileds...).Session(&gorm.Session{FullSaveAssociations: true}).Save(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
