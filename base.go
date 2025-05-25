@@ -100,6 +100,7 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 	// todo 这里优化过期时间 以及 设计如何让本地缓存随着接口返回，将实体主动删除
 	// 思路一：baseModel 提供给一个钩子函数，传入Context，读出entityKey 发起删除缓存动作，在中间件中，接口结束时候调用
 	localCache.Set(entityKey, entity, 10*time.Minute)
+	// todo 考虑Reinit 的业务实体，如何存储和读取？
 
 	// 从Ctx中读取用户信息
 	userId, _ := ctx.Get("currUserId")
