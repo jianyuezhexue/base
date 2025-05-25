@@ -45,6 +45,12 @@ func NewSalesOrderEntity(ctx *gin.Context, opt ...base.Option[SalesOrderEntity])
 func (m *SalesOrderEntity) Validate() error {
 	// 自定义数据校验逻辑
 
+	// 校验地址是否存在
+
+	// 校验客户Code是否存在
+
+	// more...
+
 	return nil
 }
 
@@ -52,12 +58,20 @@ func (m *SalesOrderEntity) Validate() error {
 func (m *SalesOrderEntity) Repair() error {
 	// 自定义数据修复逻辑
 
+	// 单据来源默认为1
+
+	// EDI对接接口，自动补全用户发票地址
+
+	// more...
+
 	return nil
 }
 
 // Complete 数据完善
 func (m *SalesOrderEntity) Complete() error {
 	// 自定义完善数据逻辑
+
+	// 数据字典对应中文名称补全
 
 	return nil
 }

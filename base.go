@@ -92,6 +92,9 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 	baseModel.OperatorName = fmt.Sprintf("%v", userName)
 
 	// 在db中预埋Context
+	if ctx.Request == nil {
+		panic("ctx.Request is nil")
+	}
 	dbContet := ctx.Request.Context()
 	dbContet = context.WithValue(dbContet, "currUserId", userId)
 	dbContet = context.WithValue(dbContet, "currUserName", userName)
@@ -288,7 +291,7 @@ func (b *BaseModel[T]) LoadData(cond SearchCondition, preloads ...PreloadsType) 
 	err := db.Scopes(cond).First(b.Entity).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("查询的数据不存在,请检查")
+			return nil, fmt.Errorf("[%s]查询的数据不存在,请检查", b.TableName)
 		}
 		return nil, err
 	}
@@ -318,6 +321,9 @@ func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error)
 	// 查询数据
 	err := db.Where("id = ?", id).First(b.Entity).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("[%v]查询的数据不存在,请检查", b.TableName)
+		}
 		return b.Entity, err
 	}
 
@@ -346,6 +352,9 @@ func (b *BaseModel[T]) LoadByBusinessCode(filedName, filedValue string, preloads
 	// 查询数据
 	err := db.Where(fmt.Sprintf("%s = ?", filedName), filedValue).First(b.Entity).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("[%v]对应业务Code[%s:%s]查询的数据不存在,请检查", b.TableName, filedName, filedValue)
+		}
 		return b.Entity, err
 	}
 	return b.Entity, nil

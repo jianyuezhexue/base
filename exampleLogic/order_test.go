@@ -101,19 +101,23 @@ func TestUpdate(t *testing.T) {
 	// 1. 实例化业务实体
 	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
 
-	// 2. 设置数据
-	_, err := salesOrderEntity.SetData(reqData)
+	// 2. 查询数据
+	_, err := salesOrderEntity.LoadById(reqData.Id)
 	assert.Nil(t, err)
 
-	// 3. 校验数据
+	// 3. 设置数据
+	_, err = salesOrderEntity.SetData(reqData)
+	assert.Nil(t, err)
+
+	// 4. 校验数据
 	err = salesOrderEntity.Validate()
 	assert.Nil(t, err)
 
-	// 4. 数据修复
+	// 5. 数据修复
 	err = salesOrderEntity.Repair()
 	assert.Nil(t, err)
 
-	// 5. 开启事务
+	// 6. 开启事务
 	err = salesOrderEntity.Transaction(func(tx *gorm.DB) error {
 
 		// 1. 新增数据
@@ -134,7 +138,7 @@ func TestUpdate(t *testing.T) {
 func TestList(t *testing.T) {
 
 	// 0. 模拟数据
-	ctx := &gin.Context{}
+	ctx := &gin.Context{Request: &http.Request{}}
 	ctx.Set("currUserId", "110")
 	ctx.Set("currUserName", "张三")
 

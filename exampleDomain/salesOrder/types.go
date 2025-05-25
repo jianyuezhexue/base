@@ -12,7 +12,7 @@ type CreateSalesOrder struct {
 
 // 更新销售订单
 type UpdateSalesOrder struct {
-	Id                int64                                      `json:"id" uri:"id" form:"id"`
+	Id                uint64                                     `json:"id" uri:"id" form:"id"`
 	OrderId           string                                     `json:"orderId" uri:"orderId" form:"orderId" vd:"mblen($)<=100;msg:'SO号[字符长度不超过100]'"`                                                  // SO号
 	CustomerName      string                                     `json:"customerName" uri:"customerName" form:"customerName" vd:"len($)>0&&mblen($)<=100;msg:'客户名称[必填,字符长度不超过100]'"`                     // 客户名称
 	Address           string                                     `json:"address" uri:"address" form:"address" vd:"len($)>0&&mblen($)<=200;msg:'地址[必填,字符长度不超过200]'"`                                      // 地址
