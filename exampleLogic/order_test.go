@@ -187,5 +187,5 @@ func TestList(t *testing.T) {
 
 	// 7. 返回数据
 	bytes, _ := json.MarshalIndent(resp, "", "  ")
-	fmt.Printf(string(bytes))
+	fmt.Printf("%s", string(bytes))
 }
