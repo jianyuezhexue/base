@@ -18,6 +18,7 @@ import (
 )
 
 var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
+var OmitUpdateFileds = []string{"updated_at", "update_by", "update_by_name"}
 
 // 底层类型约定
 type SearchCondition = func(db *gorm.DB) *gorm.DB
