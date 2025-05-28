@@ -40,8 +40,8 @@ type BaseModelInterface[T any] interface {
 	GetById(Id uint64, preloads ...PreloadsType) (*T, error)                                                                         // 根据Id查询数据
 	GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                                                   // 根据Id查询数据
 	Repair() error                                                                                                                   // 修复数据
-	Count(SearchCondition, ...SearchCondition) (int64, error)                                                                        // 统计数据条数
-	List(SearchCondition, ...SearchCondition) ([]*T, error)                                                                          // 查询列表数据
+	Count(...SearchCondition) (int64, error)                                                                                         // 统计数据条数
+	List(...SearchCondition) ([]*T, error)                                                                                           // 查询列表数据
 	Complete() error                                                                                                                 // 完善数据
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error)                                                            // 检查业务编码是否重复
@@ -251,11 +251,11 @@ func (b *BaseModel[T]) Del(ids ...uint64) error {
 }
 
 // 统计数据条数 | 搜索条件: 权限条件,搜索条件,拓展搜索条件
-func (b *BaseModel[T]) Count(cond SearchCondition, extra ...SearchCondition) (int64, error) {
+func (b *BaseModel[T]) Count(conds ...SearchCondition) (int64, error) {
 	var total int64
 
 	model := new(T)
-	err := b.Db.Debug().Model(model).Scopes(b.PermissionConditons...).Scopes(cond, b.ClearOffset()).Scopes(extra...).Count(&total).Error
+	err := b.Db.Debug().Model(model).Scopes(b.PermissionConditons...).Scopes(conds...).Scopes(b.ClearOffset()).Count(&total).Error
 	if err != nil {
 		return 0, err
 	}
@@ -263,12 +263,12 @@ func (b *BaseModel[T]) Count(cond SearchCondition, extra ...SearchCondition) (in
 }
 
 // 查询列表数据
-func (b *BaseModel[T]) List(cond SearchCondition, extra ...SearchCondition) ([]*T, error) {
+func (b *BaseModel[T]) List(conds ...SearchCondition) ([]*T, error) {
 
 	// 组合查询条件
-	db := b.Db.Debug().Scopes(b.PermissionConditons...).Scopes(cond).Scopes(extra...)
+	db := b.Db.Debug().Scopes(b.PermissionConditons...).Scopes(conds...)
 
-	// 组合排序
+	// 自定义排序规则
 	if b.CustomerOrder != "" {
 		db = db.Order(b.CustomerOrder)
 	} else {
