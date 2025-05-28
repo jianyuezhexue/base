@@ -40,8 +40,8 @@ type BaseModelInterface[T any] interface {
 	GetById(Id uint64, preloads ...PreloadsType) (*T, error)                                                                         // 根据Id查询数据
 	GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                                                   // 根据Id查询数据
 	Repair() error                                                                                                                   // 修复数据
-	Count(...SearchCondition) (int64, error)                                                                                         // 统计数据条数
-	List(...SearchCondition) ([]*T, error)                                                                                           // 查询列表数据
+	Count(conds ...SearchCondition) (int64, error)                                                                                   // 统计数据条数
+	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
 	Complete() error                                                                                                                 // 完善数据
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error)                                                            // 检查业务编码是否重复
@@ -100,6 +100,7 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 
 	// todo 这里优化过期时间 以及 设计如何让本地缓存随着接口返回，将实体主动删除
 	// 思路一：baseModel 提供给一个钩子函数，传入Context，读出entityKey 发起删除缓存动作，在中间件中，接口结束时候调用
+	// 思路二：将缓存中的计时器，更换成，ctx中的计时器，这样在接口结束时候，会自动删除缓存
 	localCache.Set(entityKey, entity, 10*time.Minute)
 	// todo 考虑Reinit 的业务实体，如何存储和读取？
 
@@ -196,7 +197,7 @@ func (b *BaseModel[T]) Create() (*T, error) {
 	}
 
 	// 执行创建操作
-	err := b.Tx().Omit("update_at", "update_by", "update_by_name").Create(b.Entity).Error
+	err := b.Tx().Omit(OmitCreateFileds...).Create(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
@@ -218,8 +219,7 @@ func (b *BaseModel[T]) Update() (*T, error) {
 	}
 
 	// 执行更新操作
-	omitFileds := []string{"created_at", "create_by", "create_by_name"}
-	err := b.Tx().Omit(omitFileds...).Session(&gorm.Session{FullSaveAssociations: true}).Save(b.Entity).Error
+	err := b.Tx().Omit(OmitUpdateFileds...).Session(&gorm.Session{FullSaveAssociations: true}).Save(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
