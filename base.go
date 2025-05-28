@@ -18,8 +18,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
-var OmitCreateFileds = []string{"create_by_name"}
+var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
 var OmitUpdateFileds = []string{"updated_at", "update_by", "update_by_name"}
 
 // 底层类型约定
