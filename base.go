@@ -278,6 +278,16 @@ func (b *BaseModel[T]) List(conds ...SearchCondition) ([]*T, error) {
 		db = db.Order("id desc")
 	}
 
+	if len(b.Preloads) > 0 {
+		for key, vals := range b.Preloads {
+			// 组合where条件和order条件
+			vals = append(vals, func(db *gorm.DB) *gorm.DB {
+				return db.Order("id asc")
+			})
+			db = db.Preload(key, vals...)
+		}
+	}
+
 	// 执行查询
 	var list []*T
 	err := db.Find(&list).Error

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jianyuezhexue/base"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrder"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrderDetail"
 	"github.com/stretchr/testify/assert"
@@ -152,14 +153,15 @@ func TestList(t *testing.T) {
 			time.Now().Add(-1 * time.Hour).Format("2006-01-02 15:04:05"),
 			time.Now().Format("2006-01-02 15:04:05"),
 		},
-		CustomerName:     "张三",
 		CustomerNameLike: "张",
 	}
 
 	// -------------- 逻辑代码 ---------------
 
 	// 1. 实例化业务实体
-	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
+	preloads := map[string][]any{"SalesOrderDetails": {}}
+	withPreloads := base.WithPreloads[salesOrder.SalesOrderEntity](preloads)
+	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx, withPreloads)
 
 	// 2. 组合搜索条件 | 注意这里传入的不能是指针
 	condtion := salesOrderEntity.MakeConditon(reqData)
