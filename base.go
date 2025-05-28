@@ -15,9 +15,11 @@ import (
 	"github.com/jianyuezhexue/base/tool"
 	"github.com/looplab/fsm"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
+// var OmitCreateFileds = []string{"created_at", "create_by", "create_by_name"}
+var OmitCreateFileds = []string{"create_by_name"}
 var OmitUpdateFileds = []string{"updated_at", "update_by", "update_by_name"}
 
 // 底层类型约定
@@ -197,7 +199,7 @@ func (b *BaseModel[T]) Create() (*T, error) {
 	}
 
 	// 执行创建操作
-	err := b.Tx().Omit(OmitCreateFileds...).Create(b.Entity).Error
+	err := b.Tx().Omit(OmitUpdateFileds...).Create(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
@@ -219,13 +221,13 @@ func (b *BaseModel[T]) Update() (*T, error) {
 	}
 
 	// 执行更新操作
-	err := b.Tx().Omit(OmitUpdateFileds...).Session(&gorm.Session{FullSaveAssociations: true}).Save(b.Entity).Error
+	err := b.Tx().Omit(OmitCreateFileds...).Session(&gorm.Session{FullSaveAssociations: true}).Clauses(clause.OnConflict{UpdateAll: true}).Updates(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}
 
 	// 记录日志
-	err = b.RecordLog(LogTypeUpdate, "修改", b.Entity, b.Entity)
+	err = b.RecordLog(LogTypeUpdate, "更新", b.Entity, b.Entity)
 	if err != nil {
 		return nil, err
 	}
@@ -657,8 +659,13 @@ func (b *BaseModel[T]) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 
 	// 自动维护创建人信息
-	b.CreateBy = currUserId.(string)
-	b.CreateByName = currUserName.(string)
+	if b.Id == 0 {
+		b.CreateBy = currUserId.(string)
+		b.CreateByName = currUserName.(string)
+	} else {
+		b.UpdateBy = currUserId.(string)
+		b.UpdateByName = currUserName.(string)
+	}
 	b.OperatorId = currUserId.(string)
 	b.OperatorName = currUserName.(string)
 	return nil
