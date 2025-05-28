@@ -62,9 +62,9 @@ type BaseModel[T any] struct {
 	CreatedAt           db.LocalTime      `json:"createdAt" search:"-"`                     // 创建时间
 	UpdatedAt           db.LocalTime      `json:"updatedAt" search:"-"`                     // 更新时间
 	DeletedAt           gorm.DeletedAt    `json:"-" gorm:"index" search:"-"`                // 删除标记
-	CreateBy            string            `json:"createBy" search:"-"`                      // 创建人
+	CreateBy            string            `json:"createBy" gorm:"<-:create" search:"-"`     // 创建人
+	CreateByName        string            `json:"createByName" gorm:"<-:create" search:"-"` // 创建人名称
 	UpdateBy            string            `json:"updateBy" search:"-"`                      // 更新人
-	CreateByName        string            `json:"createByName" search:"-"`                  // 创建人名称
 	UpdateByName        string            `json:"updateByName" search:"-"`                  // 更新人名称
 	Db                  *gorm.DB          `json:"-" gorm:"-" search:"-"`                    // 数据库连接
 	Ctx                 *gin.Context      `json:"-" gorm:"-" search:"-"`                    // 上下文
@@ -221,7 +221,8 @@ func (b *BaseModel[T]) Update() (*T, error) {
 	}
 
 	// 执行更新操作
-	err := b.Tx().Omit(OmitCreateFileds...).Session(&gorm.Session{FullSaveAssociations: true}).Clauses(clause.OnConflict{UpdateAll: true}).Updates(b.Entity).Error
+	session := &gorm.Session{FullSaveAssociations: true, Context: b.Db.Statement.Context}
+	err := b.Tx().Omit(OmitCreateFileds...).Session(session).Clauses(clause.OnConflict{UpdateAll: true}).Save(b.Entity).Error
 	if err != nil {
 		return nil, err
 	}

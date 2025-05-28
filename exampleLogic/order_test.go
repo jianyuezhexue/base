@@ -18,7 +18,7 @@ import (
 func TestCreate(t *testing.T) {
 	// 0. 模拟数据
 	ctx := &gin.Context{Request: &http.Request{}}
-	ctx.Set("currUserId", "110")
+	ctx.Set("currUserId", "1")
 	ctx.Set("currUserName", "张三")
 
 	// 模拟请求数据
@@ -75,23 +75,23 @@ func TestCreate(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	// 0. 模拟数据
 	ctx := &gin.Context{Request: &http.Request{}}
-	ctx.Set("currUserId", "120")
+	ctx.Set("currUserId", "2")
 	ctx.Set("currUserName", "李四")
 
 	// 模拟请求数据
 	reqData := &salesOrder.UpdateSalesOrder{
 		Id:           1,
 		OrderId:      fmt.Sprintf("SO%d", time.Now().UnixMicro()),
-		CustomerName: "张三",
-		Address:      "北京市朝阳区",
+		CustomerName: "张三2",
+		Address:      "北京市朝阳区2",
 		SalesOrderDetails: []*salesOrderDetail.UpdateSalesOrderDetail{
 			{
 				Id:            1,
 				SkuCode:       "SKU002",
 				ProductName:   "商品名称2",
 				BrandName:     "品牌名称2",
-				ModelType:     "型号2",
-				OrderQuantity: 2,
+				ModelType:     "型号2--**--",
+				OrderQuantity: 2 * 2,
 			},
 		},
 	}
@@ -102,7 +102,8 @@ func TestUpdate(t *testing.T) {
 	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
 
 	// 2. 查询数据
-	_, err := salesOrderEntity.LoadById(reqData.Id)
+	preloads := map[string][]any{"SalesOrderDetails": {}}
+	_, err := salesOrderEntity.LoadById(reqData.Id, preloads)
 	assert.Nil(t, err)
 
 	// 3. 设置数据
