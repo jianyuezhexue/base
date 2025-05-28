@@ -79,6 +79,18 @@ type BaseModel[T any] struct {
 	entityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
 }
 
+// 缓存空间
+type CacheSpace struct {
+	// 业务实体
+	Entity any `json:"entity"`
+	// 旧数据
+	OldData any `json:"oldData"`
+	// 主键值
+	PrimaryValue string `json:"primaryValue"`
+	// 业务编码
+	BusinessCode string `json:"businessCode"`
+}
+
 // 初始化模型
 func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity *T) BaseModel[T] {
 	currTime := time.Now().Local()
