@@ -278,11 +278,12 @@ func (b *BaseModel[T]) List(conds ...SearchCondition) ([]*T, error) {
 		db = db.Order("id desc")
 	}
 
+	// 预加载查询
 	if len(b.Preloads) > 0 {
 		for key, vals := range b.Preloads {
 			// 组合where条件和order条件
 			vals = append(vals, func(db *gorm.DB) *gorm.DB {
-				return db.Order("id asc")
+				return db.Order("id desc")
 			})
 			db = db.Preload(key, vals...)
 		}
