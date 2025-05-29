@@ -151,7 +151,6 @@ func TestList(t *testing.T) {
 	}
 
 	// -------------- 逻辑代码 ---------------
-
 	// 1. 实例化业务实体
 	preloads := map[string][]any{"SalesOrderDetails": {}}
 	withPreloads := base.WithPreloads[salesOrder.SalesOrderEntity](preloads)
