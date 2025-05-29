@@ -68,7 +68,6 @@ type BaseModel[T any] struct {
 	Db                  *gorm.DB          `json:"-" gorm:"-" search:"-"`                    // 数据库连接
 	Ctx                 *gin.Context      `json:"-" gorm:"-" search:"-"`                    // 上下文
 	Preloads            map[string][]any  `json:"-" gorm:"-" search:"-"`                    // 预加载
-	CurrTime            time.Time         `json:"-" gorm:"-" search:"-"`                    // 当前时间
 	TableName           string            `json:"-" gorm:"-" search:"-"`                    // 表名
 	OperatorId          string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人id
 	OperatorName        string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人
@@ -79,54 +78,41 @@ type BaseModel[T any] struct {
 	entityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
 }
 
-// 缓存空间
-type CacheSpace struct {
-	// 业务实体
-	Entity any `json:"entity"`
-	// 旧数据
-	OldData any `json:"oldData"`
-	// 主键值
-	PrimaryValue string `json:"primaryValue"`
-	// 业务编码
-	BusinessCode string `json:"businessCode"`
-}
-
 // 初始化模型
 func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity *T) BaseModel[T] {
-	currTime := time.Now().Local()
 
-	// todo key的前缀使用TraceId未来可实现的功能更多
-	entityKey := fmt.Sprintf("%v_%s", currTime.Nanosecond(), tableName)
+	// 前置校验
+	if ctx.Request == nil {
+		panic("[NewBaseModel]方法中, ctx.Request is nil")
+	}
+	if entity == nil {
+		panic("[NewBaseModel]方法中, 传入的entity为nil,请开发检查")
+	}
 
+	// 从上下文中读取当前用户信息
+	userId, _ := ctx.Get("currUserId")
+	userName, _ := ctx.Get("currUserName")
+
+	// 基础模型赋值
+	entityKey := fmt.Sprintf("%p", entity) // 实体指针地址
 	baseModel := BaseModel[T]{
 		Ctx:       ctx,
 		Db:        db,
 		TableName: tableName,
-		Entity:    entity,
+		Entity:    entity, // todo:去掉这里的赋值,会导致循环嵌套
 		entityKey: entityKey,
-		CurrTime:  currTime,
 	}
 
-	// 将业务模型放到本地缓存中
+	// 将业务模型放到本地缓存中 | 5分钟后自动过期
 	localCache := localCache.NewCache()
-	ctx.Set("entityKey", entityKey)
-
-	// todo 这里优化过期时间 以及 设计如何让本地缓存随着接口返回，将实体主动删除
-	// 思路一：baseModel 提供给一个钩子函数，传入Context，读出entityKey 发起删除缓存动作，在中间件中，接口结束时候调用
-	// 思路二：将缓存中的计时器，更换成，ctx中的计时器，这样在接口结束时候，会自动删除缓存
-	localCache.Set(entityKey, entity, 10*time.Minute)
-	// todo 考虑Reinit 的业务实体，如何存储和读取？
+	localCache.Set(entityKey, entity, 5*time.Minute)
 
 	// 从Ctx中读取用户信息
-	userId, _ := ctx.Get("currUserId")
-	userName, _ := ctx.Get("currUserName")
+
 	baseModel.OperatorId = fmt.Sprintf("%v", userId)
 	baseModel.OperatorName = fmt.Sprintf("%v", userName)
 
 	// 在db中预埋Context
-	if ctx.Request == nil {
-		panic("ctx.Request is nil")
-	}
 	dbContet := ctx.Request.Context()
 	dbContet = context.WithValue(dbContet, "currUserId", userId)
 	dbContet = context.WithValue(dbContet, "currUserName", userName)
@@ -170,6 +156,39 @@ func (b *BaseModel[T]) RecordLog(operatorType, operatorTypeName string, oldData,
 	// todo
 
 	return nil
+}
+
+// 获取当前时间
+func (b *BaseModel[T]) CurrTime() time.Time {
+	var currTime time.Time
+	// 从Ctx中读取当前时间
+	ctxCurrTime, _ := b.Ctx.Get("CurrTime")
+	if ctxCurrTime != nil {
+		return ctxCurrTime.(time.Time)
+	}
+
+	// 如果没有手动设置
+	currTime = time.Now().Local() // 当前时间
+	b.Ctx.Set("CurrTime", currTime)
+	return currTime
+}
+
+// 获取当前业务实体
+func (b *BaseModel[T]) GetCurrEntity() (*T, error) {
+	// 从本地缓存中读取
+	localCache := localCache.NewCache()
+	entity, exist := localCache.Get(b.entityKey)
+	if !exist {
+		return nil, fmt.Errorf("本地缓存中没有[%v]对应的业务实体,请开发检查", b.entityKey)
+	}
+
+	// 断言判断
+	resEntity, ok := entity.(*T)
+	if !ok {
+		return nil, fmt.Errorf("本地缓存中没有[%v]对应的业务实体断言失败，请检查", b.entityKey)
+	}
+
+	return resEntity, nil
 }
 
 // 构造查询条件 | 这里不能传指针注意
