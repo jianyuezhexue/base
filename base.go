@@ -73,9 +73,10 @@ type BaseModel[T any] struct {
 	OperatorName        string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人
 	CustomerOrder       string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 自定义排序规则
 	PermissionConditons []SearchCondition `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 权限条件
-	Entity              *T                `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 实体对象
 	StatesMachine       *fsm.FSM          `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 状态机
-	entityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
+	EntityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
+	// Entity              *T                `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 实体对象 | 会导致循环嵌套问题,去掉
+
 }
 
 // 初始化模型
@@ -99,8 +100,7 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 		Ctx:       ctx,
 		Db:        db,
 		TableName: tableName,
-		Entity:    entity, // todo:去掉这里的赋值,会导致循环嵌套
-		entityKey: entityKey,
+		EntityKey: entityKey,
 	}
 
 	// 将业务模型放到本地缓存中 | 5分钟后自动过期
@@ -108,7 +108,6 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 	localCache.Set(entityKey, entity, 5*time.Minute)
 
 	// 从Ctx中读取用户信息
-
 	baseModel.OperatorId = fmt.Sprintf("%v", userId)
 	baseModel.OperatorName = fmt.Sprintf("%v", userName)
 
@@ -177,15 +176,15 @@ func (b *BaseModel[T]) CurrTime() time.Time {
 func (b *BaseModel[T]) GetCurrEntity() (*T, error) {
 	// 从本地缓存中读取
 	localCache := localCache.NewCache()
-	entity, exist := localCache.Get(b.entityKey)
+	entity, exist := localCache.Get(b.EntityKey)
 	if !exist {
-		return nil, fmt.Errorf("本地缓存中没有[%v]对应的业务实体,请开发检查", b.entityKey)
+		return nil, fmt.Errorf("本地缓存中没有[%v]对应的业务实体,请开发检查", b.EntityKey)
 	}
 
 	// 断言判断
 	resEntity, ok := entity.(*T)
 	if !ok {
-		return nil, fmt.Errorf("本地缓存中没有[%v]对应的业务实体断言失败，请检查", b.entityKey)
+		return nil, fmt.Errorf("本地缓存中没有[%v]对应的业务实体断言失败，请检查", b.EntityKey)
 	}
 
 	return resEntity, nil
@@ -207,63 +206,68 @@ func (b *BaseModel[T]) ClearOffset() SearchCondition {
 
 // SetData 设置数据
 func (b *BaseModel[T]) SetData(data any) (*T, error) {
-	// 前置校验
-	if b.Entity == nil {
-		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return nil, fmt.Errorf("[BASE]中业务实体为空,请开发检查")
 	}
 
 	// 初始化实体对象
-	err := tool.CopyDeep(b.Entity, data)
+	err = tool.CopyDeep(entity, data)
 	if err != nil {
 		return nil, err
 	}
 
-	return b.Entity, nil
+	return entity, nil
 }
 
 // Create 创建数据
 func (b *BaseModel[T]) Create() (*T, error) {
-	// 前置校验
-	if b.Entity == nil {
-		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return nil, fmt.Errorf("[BASE]中业务实体为空,请开发检查")
 	}
 
 	// 执行创建操作
-	err := b.Tx().Omit(OmitUpdateFileds...).Create(b.Entity).Error
+	err = b.Tx().Omit(OmitUpdateFileds...).Create(entity).Error
 	if err != nil {
 		return nil, err
 	}
 
 	// 记录日志
-	err = b.RecordLog(LogTypeCreate, "新增", new(T), b.Entity)
+	err = b.RecordLog(LogTypeCreate, "新增", new(T), entity)
 	if err != nil {
 		return nil, err
 	}
 
-	return b.Entity, nil
+	return entity, nil
 }
 
 // 更新数据
 func (b *BaseModel[T]) Update() (*T, error) {
-	// 前置校验
-	if b.Entity == nil {
-		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return nil, fmt.Errorf("[BASE]中业务实体为空,请开发检查")
 	}
 
 	// 执行更新操作
 	session := &gorm.Session{FullSaveAssociations: true, Context: b.Db.Statement.Context}
-	err := b.Tx().Omit(OmitCreateFileds...).Session(session).Clauses(clause.OnConflict{UpdateAll: true}).Save(b.Entity).Error
+	err = b.Tx().Omit(OmitCreateFileds...).Session(session).Clauses(clause.OnConflict{UpdateAll: true}).Save(entity).Error
 	if err != nil {
 		return nil, err
 	}
 
 	// 记录日志
-	err = b.RecordLog(LogTypeUpdate, "更新", b.Entity, b.Entity)
+	// TODO 这里没有区分新旧数据，后续需要优化
+	err = b.RecordLog(LogTypeUpdate, "更新", entity, entity)
 	if err != nil {
 		return nil, err
 	}
 
-	return b.Entity, nil
+	return entity, nil
 }
 
 // 删除数据
@@ -332,9 +336,10 @@ func (b *BaseModel[T]) List(conds ...SearchCondition) ([]*T, error) {
 // 加载数据
 func (b *BaseModel[T]) LoadData(cond SearchCondition, preloads ...PreloadsType) (*T, error) {
 
-	// 前置校验
-	if b.Entity == nil {
-		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return nil, fmt.Errorf("[BASE]中业务实体为空,请开发检查")
 	}
 
 	// 预加载查询
@@ -349,7 +354,7 @@ func (b *BaseModel[T]) LoadData(cond SearchCondition, preloads ...PreloadsType) 
 		}
 	}
 
-	err := db.Scopes(cond).First(b.Entity).Error
+	err = db.Scopes(cond).First(entity).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("[%s]查询的数据不存在,请检查", b.TableName)
@@ -357,14 +362,16 @@ func (b *BaseModel[T]) LoadData(cond SearchCondition, preloads ...PreloadsType) 
 		return nil, err
 	}
 
-	return b.Entity, nil
+	return entity, nil
 }
 
 // 根据Id加载数据 LoadById(id uint64) (*T, error)
 func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error) {
-	// 前置校验
-	if b.Entity == nil {
-		return nil, errors.New("初始化实体时候没有传进来,请开发检查")
+
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return nil, fmt.Errorf("[BASE]中业务实体为空,请开发检查")
 	}
 
 	// 预加载查询
@@ -380,22 +387,23 @@ func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error)
 	}
 
 	// 查询数据
-	err := db.Where("id = ?", id).First(b.Entity).Error
+	err = db.Where("id = ?", id).First(entity).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("[%v]查询的数据不存在,请检查", b.TableName)
 		}
-		return b.Entity, err
+		return entity, err
 	}
 
-	return b.Entity, nil
+	return entity, nil
 }
 
 // LoadByBusinessCode 根据业务单号查询数据
 func (b *BaseModel[T]) LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error) {
-	// 前置校验
-	if b.Entity == nil {
-		return nil, errors.New("业务实体,没有注册进来,请开发检查")
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return nil, fmt.Errorf("[BASE]中业务实体为空,请开发检查")
 	}
 
 	// 预加载查询
@@ -411,14 +419,14 @@ func (b *BaseModel[T]) LoadByBusinessCode(filedName, filedValue string, preloads
 	}
 
 	// 查询数据
-	err := db.Where(fmt.Sprintf("%s = ?", filedName), filedValue).First(b.Entity).Error
+	err = db.Where(fmt.Sprintf("%s = ?", filedName), filedValue).First(entity).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("[%v]对应业务Code[%s:%s]查询的数据不存在,请检查", b.TableName, filedName, filedValue)
 		}
-		return b.Entity, err
+		return entity, err
 	}
-	return b.Entity, nil
+	return entity, nil
 }
 
 // 根据Id查询数据
@@ -604,8 +612,11 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 	if b.StatesMachine == nil {
 		return fmt.Errorf("状态机未注册,请开发检查")
 	}
-	if b.Entity == nil {
-		return fmt.Errorf("BaseModel中业务实体为空,需要在实例化候传入,请开发检查")
+
+	// 读取业务实体 | 校验是否为空
+	entity, err := b.GetCurrEntity()
+	if err != nil {
+		return fmt.Errorf("业务实体为空,请开发检查")
 	}
 
 	// 1. 重新设置初始状态
@@ -617,11 +628,11 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 	}
 
 	// 记录旧数据
-	oldData := b.Entity
+	oldData := entity
 
 	// 执行事件 | 注意状态没有变化是允许的
 	ctx := b.Ctx.Request.Context()
-	err := b.StatesMachine.Event(ctx, event)
+	err = b.StatesMachine.Event(ctx, event)
 	noTransitionError := fsm.NoTransitionError{Err: nil}
 	if err != nil && !errors.Is(err, noTransitionError) {
 		return fmt.Errorf("业务实体[%s]执行事件[%s]失败[%s],请开发检查", b.TableName, eventZhName, err.Error())
@@ -629,14 +640,14 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 
 	// 保存状态 | 状态没有变化时候,不保存
 	if err != nil {
-		err = b.Tx().Save(b.Entity).Error
+		err = b.Tx().Save(entity).Error
 		if err != nil {
 			return fmt.Errorf("业务实体[%s]保存最终状态失败,请开发检查", b.TableName)
 		}
 	}
 
 	// 记录操作日志
-	b.RecordLog(event, eventZhName, oldData, b.Entity)
+	b.RecordLog(event, eventZhName, oldData, entity)
 	return nil
 }
 
