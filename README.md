@@ -34,7 +34,7 @@ https://github.com/jianyuezhexue/base
 
 ### 复杂业务逻辑
 1. 基于input方向的节本结构|重点描述逻辑编排部分
-1. 实例话实体对象 NewEntity(l.Ctx) | 可以实例化多个模型
+1. 实例化实体对象 NewEntity(l.Ctx) | 可以实例化多个模型
 1. 设置数据或加载数据 SetData | LoadById
 1. 调用模型能力A entity.AblitityA()
 1. 开启事务 | entity.Transaction(func(){})
