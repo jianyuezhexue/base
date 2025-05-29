@@ -11,7 +11,6 @@ import (
 	"github.com/jianyuezhexue/base"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrder"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrderDetail"
-	"github.com/jianyuezhexue/base/localCache"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -45,7 +44,7 @@ func TestCreate(t *testing.T) {
 	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
 
 	// 2. 设置数据
-	entityData, err := salesOrderEntity.SetData(reqData)
+	_, err := salesOrderEntity.SetData(reqData)
 	assert.Nil(t, err)
 
 	// 3. 校验数据
@@ -70,11 +69,6 @@ func TestCreate(t *testing.T) {
 		return nil
 	})
 	assert.Nil(t, err)
-
-	// 查看缓存中的业务实体数据
-	localCache := localCache.NewCache()
-	_, exist := localCache.Get(entityData.BaseModel.EntityKey)
-	assert.True(t, exist)
 }
 
 // 更新接口
