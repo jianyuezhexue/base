@@ -45,9 +45,10 @@ type BaseModelInterface[T any] interface {
 	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
 	Complete() error                                                                                                                 // 完善数据
 	Del(ids ...uint64) error                                                                                                         // 删除数据
-	CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error)                                                            // 检查业务编码是否重复
+	CheckBusinessCodeExist(filedName, businessCode string) (bool, error)                                                             // 检查业务编码是否重复
+	BusinessCodeCannotRepeat(filedName, businessCode string) error                                                                   // 业务编码不能重复
 	CheckBusinessCodesExist(filedName string, values []string, more ...SearchCondition) (map[int]bool, error)                        // 批量检查业务编码是否存在
-	CheckUniqueKeysRepeat(filedNames []string, values []string, withOutIds ...uint64) (bool, error)                                  // 检查唯一键是否重复
+	CheckUniqueKeysExist(filedNames []string, values []string, withOutIds ...uint64) (bool, error)                                   // 检查唯一键是否重复
 	CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                         // 批量检查唯一键是否重复
 	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
 	ReInit(baseModel *BaseModel[T]) error                                                                                            // 重置模型中的Context和Db
@@ -501,22 +502,45 @@ func (b *BaseModel[T]) ReInit(baseModel *BaseModel[T]) error {
 	return nil
 }
 
-// 校验业务单号是否重复
-func (b *BaseModel[T]) CheckBusinessCodeRepeat(filedName, businessCode string) (bool, error) {
-	var count int64
-	model := new(T)
-	err := b.Db.Model(model).Where(fmt.Sprintf("%s = ?", filedName), businessCode).Count(&count).Error
+// 校验业务单号是否存在
+// 如果当前业务实体Id存在(意味着当前数据已经落库,会跳过当前)
+// true 存在 false 不存在
+func (b *BaseModel[T]) CheckBusinessCodeExist(filedName, businessCode string) (bool, error) {
+	ids := []uint64{}
+	err := b.Db.Model(new(T)).Select("id").Where(fmt.Sprintf("%s = ?", filedName), businessCode).Find(&ids).Error
 	if err != nil {
-		return false, err
+		return true, err
 	}
-	if count > 0 {
-		return false, fmt.Errorf("业务单号[%v]重复,请检查", businessCode)
+	// 长度为0 绝对不存在
+	if len(ids) == 0 {
+		return false, nil
 	}
-	return true, nil
+	// 大于等于2 一定存在
+	if len(ids) >= 2 {
+		return true, nil
+	}
+	// 长度为1,如果是当前数据,则不存在
+	if len(ids) == 1 && b.Id == ids[0] {
+		return false, nil
+	} else {
+		return true, nil
+	}
+}
+
+// 业务单号不可以重复
+func (b *BaseModel[T]) BusinessCodeCannotRepeat(filedName, businessCode string) error {
+	exist, err := b.CheckBusinessCodeExist(filedName, businessCode)
+	if err != nil {
+		return err
+	}
+	if exist {
+		return fmt.Errorf("[%v]业务单号[%s]不可重复,请检查", b.TableName, businessCode)
+	}
+	return nil
 }
 
 // 批量校验业务数据是否存在
-func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string, more ...SearchCondition) (map[int]bool, error) {
+func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string) (map[int]bool, error) {
 	res := make(map[int]bool)
 
 	// 控制数量
@@ -527,7 +551,7 @@ func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string
 	// 查询DB数据
 	dbFileds := []string{}
 	model := new(T)
-	err := b.Db.Model(model).Select(filedName).Scopes(more...).Where(fmt.Sprintf("%s in ?", filedName), values).Find(&dbFileds).Error
+	err := b.Db.Model(model).Select(filedName).Where(fmt.Sprintf("%s in ?", filedName), values).Find(&dbFileds).Error
 	if err != nil {
 		return res, err
 	}
@@ -547,25 +571,29 @@ func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string
 }
 
 // 校验唯一键是否存在 | 单条校验
-func (b *BaseModel[T]) CheckUniqueKeysRepeat(filedNames []string, values []string, withOutIds ...uint64) (bool, error) {
-	var count int64
-	model := new(T)
+// 如果当前业务实体Id存在(意味着当前数据已经落库,会跳过当前)
+// true 存在 false 不存在
+func (b *BaseModel[T]) CheckUniqueKeysExist(filedNames []string, values []string) (bool, error) {
+	ids := []uint64{}
 	stringBuilder := fmt.Sprintf("(%v) = ?", strings.Join(filedNames, ","))
-	// 排除自身 | todo 待这里做优化 not in 不能命中索引
-	scopes := func(db *gorm.DB) *gorm.DB {
-		if len(withOutIds) > 0 {
-			return db.Where("id not in ?", withOutIds)
-		}
-		return db
-	}
-	err := b.Db.Model(model).Scopes(scopes).Where(stringBuilder, values).Count(&count).Error
+	err := b.Db.Model(new(T)).Where(stringBuilder, values).Find(&ids).Error
 	if err != nil {
 		return true, err
 	}
-	if count > 0 {
+	// 长度为0 绝对不存在
+	if len(ids) == 0 {
+		return false, nil
+	}
+	// 大于等于2 一定存在
+	if len(ids) >= 2 {
 		return true, nil
 	}
-	return false, nil
+	// 长度为1,如果是当前数据,则不存在
+	if len(ids) == 1 && b.Id == ids[0] {
+		return false, nil
+	} else {
+		return true, nil
+	}
 }
 
 // 批量校验唯一键是否存在 | 多条校验
@@ -578,7 +606,7 @@ func (b *BaseModel[T]) CheckUniqueKeysRepeatBatch(filedNames []string, values []
 	// todo 这里有性能问题,待优化成批量查询,内存中做对比处理
 	res := make([]bool, len(values))
 	for i, v := range values {
-		repeat, err := b.CheckUniqueKeysRepeat(filedNames, v, withOutIds...)
+		repeat, err := b.CheckUniqueKeysExist(filedNames, v)
 		if err != nil {
 			return res, err
 		}
