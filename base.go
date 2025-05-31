@@ -47,8 +47,8 @@ type BaseModelInterface[T any] interface {
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeExist(filedName, businessCode string) (bool, error)                                                             // 检查业务编码是否重复
 	BusinessCodeCannotRepeat(filedName, businessCode string) error                                                                   // 业务编码不能重复
-	CheckBusinessCodesExist(filedName string, values []string, more ...SearchCondition) (map[int]bool, error)                        // 批量检查业务编码是否存在
-	CheckUniqueKeysExist(filedNames []string, values []string, withOutIds ...uint64) (bool, error)                                   // 检查唯一键是否重复
+	CheckBusinessCodesExist(filedName string, values []string) (map[int]bool, error)                                                 // 批量检查业务编码是否存在
+	CheckUniqueKeysExist(filedNames []string, values []string) (bool, error)                                                         // 检查唯一键是否重复
 	CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                         // 批量检查唯一键是否重复
 	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
 	ReInit(baseModel *BaseModel[T]) error                                                                                            // 重置模型中的Context和Db
