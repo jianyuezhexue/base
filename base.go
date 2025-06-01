@@ -13,6 +13,7 @@ import (
 	"github.com/jianyuezhexue/base/db"
 	"github.com/jianyuezhexue/base/localCache"
 	"github.com/jianyuezhexue/base/tool"
+	"github.com/jinzhu/copier"
 	"github.com/looplab/fsm"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -58,24 +59,25 @@ type BaseModelInterface[T any] interface {
 
 // 公共模型属性
 type BaseModel[T any] struct {
-	Id                  uint64            `json:"id" uri:"id" search:"-" gorm:"primarykey"` // 主键
-	CreateBy            string            `json:"createBy" gorm:"<-:create" search:"-"`     // 创建人
-	CreateByName        string            `json:"createByName" gorm:"<-:create" search:"-"` // 创建人名称
-	CreatedAt           db.LocalTime      `json:"createdAt" gorm:"<-:create"  search:"-"`   // 创建时间
-	UpdateBy            string            `json:"updateBy" gorm:"<-:update" search:"-"`     // 更新人
-	UpdateByName        string            `json:"updateByName" gorm:"<-:update" search:"-"` // 更新人名称
-	UpdatedAt           db.LocalTime      `json:"updatedAt" gorm:"<-:update" search:"-"`    // 更新时间
-	DeletedAt           gorm.DeletedAt    `json:"-" gorm:"index" search:"-"`                // 删除标记
-	Db                  *gorm.DB          `json:"-" gorm:"-" search:"-"`                    // 数据库连接
-	Ctx                 *gin.Context      `json:"-" gorm:"-" search:"-"`                    // 上下文
-	Preloads            map[string][]any  `json:"-" gorm:"-" search:"-"`                    // 预加载
-	TableName           string            `json:"-" gorm:"-" search:"-"`                    // 表名
-	OperatorId          string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人id
-	OperatorName        string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人
-	CustomerOrder       string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 自定义排序规则
-	PermissionConditons []SearchCondition `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 权限条件
-	StatesMachine       *fsm.FSM          `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 状态机
-	EntityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
+	Id                    uint64            `json:"id" uri:"id" search:"-" gorm:"primarykey"` // 主键
+	CreateBy              string            `json:"createBy" gorm:"<-:create" search:"-"`     // 创建人
+	CreateByName          string            `json:"createByName" gorm:"<-:create" search:"-"` // 创建人名称
+	CreatedAt             db.LocalTime      `json:"createdAt" gorm:"<-:create"  search:"-"`   // 创建时间
+	UpdateBy              string            `json:"updateBy" gorm:"<-:update" search:"-"`     // 更新人
+	UpdateByName          string            `json:"updateByName" gorm:"<-:update" search:"-"` // 更新人名称
+	UpdatedAt             db.LocalTime      `json:"updatedAt" gorm:"<-:update" search:"-"`    // 更新时间
+	DeletedAt             gorm.DeletedAt    `json:"-" gorm:"index" search:"-"`                // 删除标记
+	Db                    *gorm.DB          `json:"-" gorm:"-" search:"-"`                    // 数据库连接
+	Ctx                   *gin.Context      `json:"-" gorm:"-" search:"-"`                    // 上下文
+	Preloads              map[string][]any  `json:"-" gorm:"-" search:"-"`                    // 预加载
+	TableName             string            `json:"-" gorm:"-" search:"-"`                    // 表名
+	OperatorId            string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人id
+	OperatorName          string            `json:"-" gorm:"-" search:"-"`                    // 操作日志操作人
+	CustomerOrder         string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 自定义排序规则
+	DefaultSearchConditon SearchCondition   `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 默认搜索条件
+	PermissionConditons   []SearchCondition `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 权限条件
+	StatesMachine         *fsm.FSM          `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 状态机
+	EntityKey             string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
 }
 
 // 初始化模型
@@ -129,14 +131,14 @@ func WithPermissionConditons[T any](conds ...SearchCondition) Option[T] {
 	}
 }
 
-// WithPreloads 注入Preload
+// 注入Preload
 func WithPreloads[T any](preloads map[string][]any) Option[T] {
 	return func(b *BaseModel[T]) {
 		b.Preloads = preloads
 	}
 }
 
-// WithCustomerOrder 自定义排序规则
+// 自定义排序规则
 func WithCustomerOrder[T any](order string) Option[T] {
 	return func(b *BaseModel[T]) {
 		b.CustomerOrder = order
@@ -150,6 +152,7 @@ const LogTypeCreate string = "create"
 const LogTypeUpdate string = "update"
 const LogTypeDelete string = "delete"
 
+// 记录操作日志 ｜ todo
 func (b *BaseModel[T]) RecordLog(operatorType, operatorTypeName string, oldData, newData any) error {
 	// todo
 
@@ -203,7 +206,7 @@ func (b *BaseModel[T]) ClearOffset() SearchCondition {
 	}
 }
 
-// SetData 设置数据
+// 设置数据
 func (b *BaseModel[T]) SetData(data any) (*T, error) {
 	// 读取业务实体 | 校验是否为空
 	entity, err := b.GetCurrEntity()
@@ -220,7 +223,7 @@ func (b *BaseModel[T]) SetData(data any) (*T, error) {
 	return entity, nil
 }
 
-// Create 创建数据
+// 创建数据
 func (b *BaseModel[T]) Create() (*T, error) {
 
 	// 读取业务实体 | 校验是否为空
@@ -277,32 +280,32 @@ func (b *BaseModel[T]) Del(ids ...uint64) error {
 	if err != nil {
 		return err
 	}
-
-	// // 记录日志
-	// err = b.RecordLog(LogTypeDelete, "删除", b.Entity, new(T))
-	// if err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
-// 统计数据条数 | 搜索条件: 权限条件,搜索条件,拓展搜索条件
+// 统计数据条数 | 搜索条件: 默认条件,权限条件,搜索条件,拓展搜索条件
 func (b *BaseModel[T]) Count(conds ...SearchCondition) (int64, error) {
 	var total int64
-
-	model := new(T)
-	err := b.Db.Debug().Model(model).Scopes(b.PermissionConditons...).Scopes(conds...).Scopes(b.ClearOffset()).Count(&total).Error
+	err := b.Db.Debug().Model(new(T)).
+		Scopes(b.DefaultSearchConditon).
+		Scopes(b.PermissionConditons...).
+		Scopes(conds...).
+		Scopes(b.ClearOffset()).
+		Count(&total).Error
 	if err != nil {
 		return 0, err
 	}
 	return total, err
 }
 
-// 查询列表数据
+// 查询列表数据 | 搜索条件: 默认条件,权限条件,搜索条件,拓展搜索条件
 func (b *BaseModel[T]) List(conds ...SearchCondition) ([]*T, error) {
 
 	// 组合查询条件
-	db := b.Db.Debug().Scopes(b.PermissionConditons...).Scopes(conds...)
+	db := b.Db.Debug().
+		Scopes(b.DefaultSearchConditon).
+		Scopes(b.PermissionConditons...).
+		Scopes(conds...)
 
 	// 自定义排序规则
 	if b.CustomerOrder != "" {
@@ -364,7 +367,7 @@ func (b *BaseModel[T]) LoadData(cond SearchCondition, preloads ...PreloadsType) 
 	return entity, nil
 }
 
-// 根据Id加载数据 LoadById(id uint64) (*T, error)
+// 根据Id加载数据
 func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error) {
 
 	// 读取业务实体 | 校验是否为空
@@ -397,7 +400,7 @@ func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error)
 	return entity, nil
 }
 
-// LoadByBusinessCode 根据业务单号查询数据
+// 根据业务单号查询数据
 func (b *BaseModel[T]) LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error) {
 	// 读取业务实体 | 校验是否为空
 	entity, err := b.GetCurrEntity()
@@ -454,7 +457,7 @@ func (b *BaseModel[T]) GetById(Id uint64, preloads ...PreloadsType) (*T, error) 
 	return data, nil
 }
 
-// GetByIds 根据Ids查询数据
+// 根据Ids查询数据
 func (b *BaseModel[T]) GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error) {
 
 	// 预加载处理
@@ -488,7 +491,7 @@ func (b *BaseModel[T]) GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, e
 	return dataList, nil
 }
 
-// ReInit 重置上下文和Db
+// 重置上下文和Db
 func (b *BaseModel[T]) ReInit(baseModel *BaseModel[T]) error {
 	if b.Ctx == nil || b.Db == nil {
 		return fmt.Errorf("[ReInit]Context或DB为空,请开发检查")
@@ -500,7 +503,8 @@ func (b *BaseModel[T]) ReInit(baseModel *BaseModel[T]) error {
 	return nil
 }
 
-// 校验业务单号是否存在
+//	校验业务单号是否存在
+//
 // 如果当前业务实体Id存在(意味着当前数据已经落库,会跳过当前)
 // true 存在 false 不存在
 func (b *BaseModel[T]) CheckBusinessCodeExist(filedName, businessCode string) (bool, error) {
@@ -563,7 +567,8 @@ func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string
 	return res, nil
 }
 
-// 校验唯一键是否存在 | 单条校验
+//	校验唯一键是否存在 | 单条校验
+//
 // 如果当前业务实体Id存在(意味着当前数据已经落库,会跳过当前)
 // true 存在 false 不存在
 func (b *BaseModel[T]) CheckUniqueKeysExist(filedNames []string, values []string) (bool, error) {
@@ -589,7 +594,8 @@ func (b *BaseModel[T]) CheckUniqueKeysExist(filedNames []string, values []string
 	}
 }
 
-// 批量校验唯一键是否存在 | 多条校验
+//	批量校验唯一键是否存在 | 多条校验
+//
 // CONCAT_WS(",",order_id,status,create_by) as UniqueValues
 // true 存在 false 不存在
 func (b *BaseModel[T]) CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error) {
@@ -672,9 +678,7 @@ func (b *BaseModel[T]) InitStateMachine(initStatus string, events []fsm.EventDes
 	return nil
 }
 
-// 执行某个事件
-type EventCallback[T any] func() error
-
+// 事件执行
 func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) error {
 	// 0. 前置校验
 	if b.StatesMachine == nil {
@@ -696,7 +700,8 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 	}
 
 	// 记录旧数据
-	oldData := entity
+	oldData := new(T)
+	copier.Copy(oldData, entity)
 
 	// 执行事件 | 注意状态没有变化是允许的
 	ctx := b.Ctx.Request.Context()
