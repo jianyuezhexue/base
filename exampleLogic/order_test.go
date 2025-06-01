@@ -185,3 +185,23 @@ func TestList(t *testing.T) {
 	bytes, _ := json.MarshalIndent(resp, "", "  ")
 	fmt.Printf("%s", string(bytes))
 }
+
+// TestCheckUniqueKeysRepeatBatch
+func TestCheckUniqueKeysRepeatBatch(t *testing.T) {
+	ctx := &gin.Context{Request: &http.Request{}}
+	// 1. 实例化业务实体
+	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
+
+	// 2. 组合数据
+	uniqueKeys := []string{"order_id", "customer_name"}
+	uniqueValues := [][]string{
+		{"SO1111111111111111111", "张三"},
+		{"SO1748435979939020", "张三2"},
+	}
+
+	// 3. 校验
+	repeats, err := salesOrderEntity.CheckUniqueKeysRepeatBatch(uniqueKeys, uniqueValues)
+	assert.Nil(t, err)
+	assert.False(t, repeats[0])
+	assert.True(t, repeats[1])
+}

@@ -76,8 +76,6 @@ type BaseModel[T any] struct {
 	PermissionConditons []SearchCondition `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 权限条件
 	StatesMachine       *fsm.FSM          `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 状态机
 	EntityKey           string            `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 业务实体Key
-	// Entity              *T                `json:"-" gorm:"-" search:"-" copier:"-" vd:"-"`  // 实体对象 | 会导致循环嵌套问题,去掉
-
 }
 
 // 初始化模型
@@ -543,11 +541,6 @@ func (b *BaseModel[T]) BusinessCodeCannotRepeat(filedName, businessCode string) 
 func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string) (map[int]bool, error) {
 	res := make(map[int]bool)
 
-	// 控制数量
-	if len(values) > 500 {
-		return nil, fmt.Errorf("批量校验业务数据是否存在,单次数量不能超过500个,请开发检查")
-	}
-
 	// 查询DB数据
 	dbFileds := []string{}
 	model := new(T)
@@ -597,21 +590,68 @@ func (b *BaseModel[T]) CheckUniqueKeysExist(filedNames []string, values []string
 }
 
 // 批量校验唯一键是否存在 | 多条校验
+// CONCAT_WS(",",order_id,status,create_by) as UniqueValues
+// true 存在 false 不存在
 func (b *BaseModel[T]) CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error) {
-	// 控制数量
-	if len(values) > 500 {
-		return nil, fmt.Errorf("批量校验唯一键是否存在,单次数量不能超过500个,请开发检查")
+	res := make([]bool, len(values))
+	if len(values) == 0 || len(filedNames) == 0 {
+		return res, nil
 	}
 
-	// todo 这里有性能问题,待优化成批量查询,内存中做对比处理
-	res := make([]bool, len(values))
-	for i, v := range values {
-		repeat, err := b.CheckUniqueKeysExist(filedNames, v)
-		if err != nil {
-			return res, err
-		}
-		res[i] = repeat
+	// 定义结构体
+	type itemData struct {
+		Id           uint64 // 主键ID
+		UniqueValues string // 逗号隔开的字符串拼接 ｜ CONCAT_WS
 	}
+
+	// 构建查询条件
+	fieldsWithNull := make([]string, len(filedNames))
+	for i, f := range filedNames {
+		fieldsWithNull[i] = fmt.Sprintf("IFNULL(%s, '')", f)
+	}
+	whereBuilder := fmt.Sprintf("(%v) in ?", strings.Join(filedNames, ","))
+	selectBuilder := fmt.Sprintf("id,CONCAT_WS(',',%v) as UniqueValues", strings.Join(fieldsWithNull, ","))
+
+	// 执行查询
+	list := []*itemData{}
+	err := b.Db.Model(new(T)).Select(selectBuilder).Where(whereBuilder, values).Find(&list).Error
+	if err != nil {
+		return res, err
+	}
+
+	// 构建结果数据Map
+	resMap := make(map[string]uint64)
+	for _, item := range list {
+		resMap[item.UniqueValues] = item.Id
+	}
+
+	// 对比数据处理
+	for index, itemVals := range values {
+		itemUniqueVal := strings.Join(itemVals, ",")
+
+		// 结果中查询是否存在
+		id, exists := resMap[itemUniqueVal]
+
+		// 如果存在,且没有在withOutIds中,则认为重复
+		if exists {
+			inWithOutIds := false
+			for _, withOutId := range withOutIds {
+				if withOutId == id {
+					inWithOutIds = true
+					break
+				}
+			}
+			// 如果没有排除的ID,则认为重复
+			if !inWithOutIds {
+				res[index] = true
+				continue
+			}
+		}
+
+		// 默认不存在
+		res[index] = false
+	}
+
 	return res, nil
 }
 
