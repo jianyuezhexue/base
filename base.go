@@ -50,7 +50,7 @@ type BaseModelInterface[T any] interface {
 	BusinessCodeCannotRepeat(filedName, businessCode string) error                                                                   // 业务编码不能重复
 	CheckBusinessCodesExist(filedName string, values []string) (map[int]bool, error)                                                 // 批量检查业务编码是否存在
 	CheckUniqueKeysExist(filedNames []string, values []string) (bool, error)                                                         // 检查唯一键是否重复
-	CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                         // 批量检查唯一键是否重复
+	CheckUniqueKeysExistBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                          // 批量检查唯一键是否重复
 	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
 	ReInit(baseModel *BaseModel[T]) error                                                                                            // 重置模型中的Context和Db
 	InitStateMachine(initStatus string, events []fsm.EventDesc, afterEvent fsm.Callback, callbacks ...map[string]fsm.Callback) error // 初始化状态机
@@ -598,7 +598,7 @@ func (b *BaseModel[T]) CheckUniqueKeysExist(filedNames []string, values []string
 //
 // CONCAT_WS(",",order_id,status,create_by) as UniqueValues
 // true 存在 false 不存在
-func (b *BaseModel[T]) CheckUniqueKeysRepeatBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error) {
+func (b *BaseModel[T]) CheckUniqueKeysExistBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error) {
 	res := make([]bool, len(values))
 	if len(values) == 0 || len(filedNames) == 0 {
 		return res, nil

@@ -186,8 +186,8 @@ func TestList(t *testing.T) {
 	fmt.Printf("%s", string(bytes))
 }
 
-// TestCheckUniqueKeysRepeatBatch
-func TestCheckUniqueKeysRepeatBatch(t *testing.T) {
+// TestCheckUniqueKeysExistBatch
+func TestCheckUniqueKeysExistBatch(t *testing.T) {
 	ctx := &gin.Context{Request: &http.Request{}}
 	// 1. 实例化业务实体
 	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
@@ -200,7 +200,7 @@ func TestCheckUniqueKeysRepeatBatch(t *testing.T) {
 	}
 
 	// 3. 校验
-	repeats, err := salesOrderEntity.CheckUniqueKeysRepeatBatch(uniqueKeys, uniqueValues)
+	repeats, err := salesOrderEntity.CheckUniqueKeysExistBatch(uniqueKeys, uniqueValues)
 	assert.Nil(t, err)
 	assert.False(t, repeats[0])
 	assert.True(t, repeats[1])
