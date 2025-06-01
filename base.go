@@ -62,9 +62,9 @@ type BaseModel[T any] struct {
 	CreateBy            string            `json:"createBy" gorm:"<-:create" search:"-"`     // 创建人
 	CreateByName        string            `json:"createByName" gorm:"<-:create" search:"-"` // 创建人名称
 	CreatedAt           db.LocalTime      `json:"createdAt" gorm:"<-:create"  search:"-"`   // 创建时间
-	UpdateBy            string            `json:"updateBy" search:"-"`                      // 更新人
-	UpdateByName        string            `json:"updateByName" search:"-"`                  // 更新人名称
-	UpdatedAt           db.LocalTime      `json:"updatedAt" search:"-"`                     // 更新时间
+	UpdateBy            string            `json:"updateBy" gorm:"<-:update" search:"-"`     // 更新人
+	UpdateByName        string            `json:"updateByName" gorm:"<-:update" search:"-"` // 更新人名称
+	UpdatedAt           db.LocalTime      `json:"updatedAt" gorm:"<-:update" search:"-"`    // 更新时间
 	DeletedAt           gorm.DeletedAt    `json:"-" gorm:"index" search:"-"`                // 删除标记
 	Db                  *gorm.DB          `json:"-" gorm:"-" search:"-"`                    // 数据库连接
 	Ctx                 *gin.Context      `json:"-" gorm:"-" search:"-"`                    // 上下文
