@@ -31,6 +31,23 @@ func (m *SalesOrderEntity) TableName() string {
 	return "sales_order"
 }
 
+// 定义事件
+// 假设订单状态枚举 0-制单 1-确认订单 2-部分发货 3-全部发货 4-签收 5-回单 6-退货
+var Events = []fsm.EventDesc{
+	// 制单 ---确认--> 确认订单
+	{Src: []string{"0"}, Name: "confirm", Dst: "1"},
+	// 确认订单,部分发货 ---部分发货--> 部分发货
+	{Src: []string{"1", "2"}, Name: "partDelivery", Dst: "2"},
+	// 确认订单,部分发货 ---全部发货--> 全部发货
+	{Src: []string{"1", "2"}, Name: "allDelivery", Dst: "3"},
+	// 全部发货 ---签收--> 签收
+	{Src: []string{"3"}, Name: "signFor", Dst: "4"},
+	// 签收 ---回单--> 回单
+	{Src: []string{"4"}, Name: "back", Dst: "5"},
+	// 签收,回单 ---退货--> 退货
+	{Src: []string{"4", "5"}, Name: "returnGoods", Dst: "6"},
+}
+
 // 实例化实体业务模型
 func NewSalesOrderEntity(ctx *gin.Context, opt ...base.Option[SalesOrderEntity]) SalesOrderInterface {
 	entity := &SalesOrderEntity{}

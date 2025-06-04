@@ -246,7 +246,7 @@ func TestEventExecution(t *testing.T) {
 	// 4. 开启事务
 	err = salesOrderEntity.Transaction(func(tx *gorm.DB) error {
 		// 1. 更新状态为确认订单
-		saleOrderData.Status = 1
+		saleOrderData.Status = 2
 		_, err2 := salesOrderEntity.Update()
 		if err2 != nil {
 			return err2
