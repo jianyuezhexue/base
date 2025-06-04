@@ -56,7 +56,7 @@ type BaseModelInterface[T any] interface {
 	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
 	ReInit(baseModel *BaseModel[T]) error                                                                                            // 重置模型中的Context和Db
 	InitStateMachine(initStatus string, events []fsm.EventDesc, afterEvent fsm.Callback, callbacks ...map[string]fsm.Callback) error // 初始化状态机
-	EventExecution(initStatus, event, eventZhName string) error                                                                      // 执行事件
+	EventExecution(initStatus, event, eventZhName string, args ...any) error                                                         // 执行事件
 }
 
 // 公共模型属性
@@ -683,7 +683,7 @@ func (b *BaseModel[T]) InitStateMachine(initStatus string, events []fsm.EventDes
 }
 
 // 事件执行
-func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) error {
+func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string, args ...any) error {
 	// 0. 前置校验
 	if b.StatesMachine == nil {
 		return fmt.Errorf("状态机未注册,请开发检查")
@@ -709,7 +709,7 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 
 	// 执行事件 | 注意状态没有变化是允许的
 	ctx := b.Ctx.Request.Context()
-	err = b.StatesMachine.Event(ctx, event)
+	err = b.StatesMachine.Event(ctx, event, args)
 	noTransitionError := fsm.NoTransitionError{Err: nil}
 	if err != nil && !errors.Is(err, noTransitionError) {
 		return fmt.Errorf("业务实体[%s]执行事件[%s]失败[%s],请开发检查", b.TableName, eventZhName, err.Error())
