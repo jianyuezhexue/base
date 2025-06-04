@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jianyuezhexue/base"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrder"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrderDetail"
+	"github.com/looplab/fsm"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -204,4 +206,64 @@ func TestCheckUniqueKeysExistBatch(t *testing.T) {
 	assert.Nil(t, err)
 	assert.False(t, repeats[0])
 	assert.True(t, repeats[1])
+}
+
+// TestEventExecution
+// 定义事件
+// 假设订单状态枚举 0-制单 1-确认订单 2-部分发货 3-全部发货 4-签收 5-回单 6-退货
+var Events = []fsm.EventDesc{
+	// 制单 ---确认--> 确认订单
+	{Src: []string{"0"}, Name: "confirm", Dst: "1"},
+	// 确认订单,部分发货 ---部分发货--> 部分发货
+	{Src: []string{"1", "2"}, Name: "partDelivery", Dst: "2"},
+	// 确认订单,部分发货 ---全部发货--> 全部发货
+	{Src: []string{"1", "2"}, Name: "allDelivery", Dst: "3"},
+	// 全部发货 ---签收--> 签收
+	{Src: []string{"3"}, Name: "signFor", Dst: "4"},
+	// 签收 ---回单--> 回单
+	{Src: []string{"4"}, Name: "back", Dst: "5"},
+	// 签收,回单 ---退货--> 退货
+	{Src: []string{"4", "5"}, Name: "returnGoods", Dst: "6"},
+}
+
+func TestEventExecution(t *testing.T) {
+	// 0. 模拟数据
+	ctx := &gin.Context{Request: &http.Request{}}
+	ctx.Set("currUserId", "110")
+	ctx.Set("currUserName", "张三")
+
+	// 1. 实例化业务实体
+	salesOrderEntity := salesOrder.NewSalesOrderEntity(ctx)
+
+	// 2. 根据ID查询数据
+	saleOrderData, err := salesOrderEntity.LoadById(1)
+	assert.Nil(t, err)
+
+	// 3. 初始化状态机
+	err = salesOrderEntity.InitStateMachine(strconv.Itoa(saleOrderData.Status), Events, saleOrderData.EventCallBack)
+	assert.Nil(t, err)
+
+	// 4. 开启事务
+	err = salesOrderEntity.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新状态为确认订单
+		saleOrderData.Status = 1
+		_, err2 := salesOrderEntity.Update()
+		if err2 != nil {
+			return err2
+		}
+
+		// 2. 执行全部发货事件
+		err2 = salesOrderEntity.EventExecution(strconv.Itoa(saleOrderData.Status), "allDelivery", "全部发货")
+		if err2 != nil {
+			return err2
+		}
+
+		return nil
+	})
+	assert.Nil(t, err)
+
+	// 5. 重新查库校验状态
+	saleOrderData, err = salesOrderEntity.LoadById(1)
+	assert.Nil(t, err)
+	assert.Equal(t, 3, saleOrderData.Status)
 }

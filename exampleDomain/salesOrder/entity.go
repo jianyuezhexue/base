@@ -1,10 +1,14 @@
 package salesOrder
 
 import (
+	"context"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jianyuezhexue/base"
 	"github.com/jianyuezhexue/base/db"
 	"github.com/jianyuezhexue/base/exampleDomain/salesOrderDetail"
+	"github.com/looplab/fsm"
 )
 
 // 业务模型接口定义
@@ -76,4 +80,11 @@ func (m *SalesOrderEntity) Complete() error {
 	return nil
 }
 
-// more abilits...
+// EventCallBack 事件回调
+func (m *SalesOrderEntity) EventCallBack(_ context.Context, e *fsm.Event) {
+	// 维护状态为最新状态
+	m.Status, _ = strconv.Atoi(e.Dst)
+
+	// 更多逻辑...
+	// 举例: 异步推送一条用户操作日志
+}

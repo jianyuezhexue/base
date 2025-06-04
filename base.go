@@ -86,11 +86,14 @@ type BaseModel[T any] struct {
 func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity *T) BaseModel[T] {
 
 	// 前置校验
+	if ctx == nil {
+		panic("调用[NewBaseModel]入参, ctx为nil,请开发检查")
+	}
 	if ctx.Request == nil {
-		panic("[NewBaseModel]方法中, ctx.Request is nil")
+		panic("调用[NewBaseModel]入参, ctx.Request is nil,请开发检查")
 	}
 	if entity == nil {
-		panic("[NewBaseModel]方法中, 传入的entity为nil,请开发检查")
+		panic("调用[NewBaseModel]入参, 传入的entity为nil,请开发检查")
 	}
 
 	// 从上下文中读取当前用户信息
@@ -712,12 +715,10 @@ func (b *BaseModel[T]) EventExecution(initStatus, event, eventZhName string) err
 		return fmt.Errorf("业务实体[%s]执行事件[%s]失败[%s],请开发检查", b.TableName, eventZhName, err.Error())
 	}
 
-	// 保存状态 | 状态没有变化时候,不保存
+	// 保存最新状态
+	err = b.Tx().Save(entity).Error
 	if err != nil {
-		err = b.Tx().Save(entity).Error
-		if err != nil {
-			return fmt.Errorf("业务实体[%s]保存最终状态失败,请开发检查", b.TableName)
-		}
+		return fmt.Errorf("业务实体[%s]保存最终状态失败,请开发检查", b.TableName)
 	}
 
 	// 记录操作日志
