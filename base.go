@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"slices"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jianyuezhexue/base/db"
 	"github.com/jianyuezhexue/base/localCache"
@@ -640,13 +642,7 @@ func (b *BaseModel[T]) CheckUniqueKeysExistBatch(filedNames []string, values [][
 
 		// 如果存在,且没有在withOutIds中,则认为重复
 		if exists {
-			inWithOutIds := false
-			for _, withOutId := range withOutIds {
-				if withOutId == id {
-					inWithOutIds = true
-					break
-				}
-			}
+			inWithOutIds := slices.Contains(withOutIds, id)
 			// 如果没有排除的ID,则认为重复
 			if !inWithOutIds {
 				res[index] = true
