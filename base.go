@@ -121,7 +121,7 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 	dbContet := context.Background()
 	dbContet = context.WithValue(dbContet, "currUserId", userId)
 	dbContet = context.WithValue(dbContet, "currUserName", userName)
-	baseModel.Db.WithContext(dbContet)
+	baseModel.Db.Statement.Context = dbContet
 
 	// 给一个空默认搜索条件
 	baseModel.DefaultSearchConditon = func(db *gorm.DB) *gorm.DB {
