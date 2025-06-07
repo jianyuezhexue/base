@@ -117,11 +117,11 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 	baseModel.OperatorId = fmt.Sprintf("%v", userId)
 	baseModel.OperatorName = fmt.Sprintf("%v", userName)
 
-	// 在db中预埋Context
-	dbContet := ctx.Request.Context()
+	// 在db context 预埋用户信息
+	dbContet := context.Background()
 	dbContet = context.WithValue(dbContet, "currUserId", userId)
 	dbContet = context.WithValue(dbContet, "currUserName", userName)
-	baseModel.Db.Statement.Context = dbContet
+	baseModel.Db.WithContext(dbContet)
 
 	// 给一个空默认搜索条件
 	baseModel.DefaultSearchConditon = func(db *gorm.DB) *gorm.DB {
