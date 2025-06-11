@@ -903,3 +903,14 @@ func GetDataWithCtxCache[T any](ctx *gin.Context, key string, fn func() (T, erro
 
 	return data, nil
 }
+
+// 更新缓存
+func ResetDataWithCtxCache[T any](ctx *gin.Context, key string, data T) {
+	// 使用互斥锁防止并发
+	var mu sync.Mutex
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 设置缓存
+	ctx.Set(key, data)
+}
