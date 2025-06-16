@@ -36,6 +36,7 @@ type BaseModelInterface[T any] interface {
 	Transaction(fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error                                                            // 事务处理
 	SetData(data any) (*T, error)                                                                                                    // 设置数据
 	Validate() error                                                                                                                 // 数据校验
+	Complete() error                                                                                                                 // 完善数据
 	Create() (*T, error)                                                                                                             // 新增数据
 	Update() (*T, error)                                                                                                             // 更新数据
 	LoadData(cond SearchCondition, preloads ...PreloadsType) (*T, error)                                                             // 加载数据
@@ -46,7 +47,6 @@ type BaseModelInterface[T any] interface {
 	Repair() error                                                                                                                   // 修复数据
 	Count(conds ...SearchCondition) (int64, error)                                                                                   // 统计数据条数
 	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
-	Complete() error                                                                                                                 // 完善数据
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeExist(filedName, businessCode string) (bool, error)                                                             // 检查业务编码是否重复
 	BusinessCodeCannotRepeat(filedName, businessCode string) error                                                                   // 业务编码不能重复
@@ -166,6 +166,21 @@ const LogTypeDelete string = "delete"
 func (b *BaseModel[T]) RecordLog(operatorType, operatorTypeName string, oldData, newData any) error {
 	// todo
 
+	return nil
+}
+
+// 数据校验钩子函数
+func (b *BaseModel[T]) Validate() error {
+	return nil
+}
+
+// 数据修复钩子函数
+func (b *BaseModel[T]) Repair() error {
+	return nil
+}
+
+// 数据完善钩子函数
+func (b *BaseModel[T]) Complete() error {
 	return nil
 }
 
