@@ -109,9 +109,17 @@ func NewBaseModel[T any](ctx *gin.Context, db *gorm.DB, tableName string, entity
 		EntityKey: entityKey,
 	}
 
-	// 将业务模型放到本地缓存中 | 5分钟后自动过期
+	// 读取Context中的deadline
+	remaining := 5 * time.Minute
+	deadline, ok := ctx.Request.Context().Deadline()
+	if ok {
+		// 计算剩余时间
+		remaining = time.Until(deadline)
+	}
+
+	// 将业务模型放到本地缓存中 | 过期时间: context中剩余时间或默认5分钟过期
 	localCache := localCache.NewCache()
-	localCache.Set(entityKey, entity, 5*time.Minute)
+	localCache.Set(entityKey, entity, remaining)
 
 	// 从Ctx中读取用户信息
 	baseModel.OperatorId = fmt.Sprintf("%v", userId)
