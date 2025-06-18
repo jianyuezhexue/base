@@ -47,6 +47,9 @@ type BaseModelInterface[T any] interface {
 	Repair() error                                                                                                                   // 修复数据
 	Count(conds ...SearchCondition) (int64, error)                                                                                   // 统计数据条数
 	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
+	ListByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) ([]*T, error)                                         // 根据业务编码查询列表数据
+	CountByBusinessCode(businessCode string) (int64, error)                                                                          // 根据业务编码统计数量
+	MaxId() (int64, error)                                                                                                           // 获取最大ID
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeExist(filedName, businessCode string) (bool, error)                                                             // 检查业务编码是否重复
 	BusinessCodeCannotRepeat(filedName, businessCode string) error                                                                   // 业务编码不能重复
@@ -522,6 +525,49 @@ func (b *BaseModel[T]) GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, e
 		return nil, err
 	}
 	return dataList, nil
+}
+
+// 根据业务编码查询列表
+func (b *BaseModel[T]) ListByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) ([]*T, error) {
+	// 预加载处理
+	db := b.Db
+	if len(preloads) > 0 {
+		for key, vals := range preloads[0] {
+			// 组合where条件和order条件
+			vals = append(vals, func(db *gorm.DB) *gorm.DB {
+				return db.Order("id asc")
+			})
+			db = db.Preload(key, vals...)
+		}
+	}
+
+	// 查询数据
+	list := []*T{}
+	err := db.Where(fmt.Sprintf("%s = ?", filedName), filedValue).Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// CountByBusinessCode 根据业务编码统计数量
+func (m *BaseModel[T]) CountByBusinessCode(businessCode string) (int64, error) {
+	var count int64
+	err := m.Db.Model(new(T)).Where("business_code = ?", businessCode).Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// MaxId 获取最大ID
+func (m *BaseModel[T]) MaxId() (int64, error) {
+	var maxId int64
+	err := m.Db.Model(new(T)).Select("max(id)").Scan(&maxId).Error
+	if err != nil {
+		return 0, err
+	}
+	return maxId, nil
 }
 
 // 重置上下文和Db

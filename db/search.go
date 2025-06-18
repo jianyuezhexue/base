@@ -335,7 +335,10 @@ func MakeCondition(q interface{}) func(db *gorm.DB) *gorm.DB {
 					pageSize = 10
 				}
 
-				offset := max((page-1)*pageSize, 0)
+				offset := (page - 1) * pageSize
+				if offset < 0 {
+					offset = 0
+				}
 				db = db.Offset(int(offset)).Limit(int(pageSize))
 			}
 		}
