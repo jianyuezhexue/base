@@ -185,12 +185,12 @@ func (b *BaseModel[T]) Validate() error {
 	return nil
 }
 
-// 数据修复钩子函数
+// 数据修复
 func (b *BaseModel[T]) Repair() error {
 	return nil
 }
 
-// 数据完善钩子函数
+// 数据完善
 func (b *BaseModel[T]) Complete() error {
 	return nil
 }
@@ -238,6 +238,22 @@ func (b *BaseModel[T]) MakeConditon(data any) SearchCondition {
 func (b *BaseModel[T]) ClearOffset() SearchCondition {
 	return func(db *gorm.DB) *gorm.DB {
 		db = db.Limit(-1).Offset(-1)
+		return db
+	}
+}
+
+// 按照Id倒叙查询
+func (b *BaseModel[T]) OrderByIdDesc() SearchCondition {
+	return func(db *gorm.DB) *gorm.DB {
+		db = db.Order("id desc")
+		return db
+	}
+}
+
+// 按照Id生序查询
+func (b *BaseModel[T]) OrderByIdAsc() SearchCondition {
+	return func(db *gorm.DB) *gorm.DB {
+		db = db.Order("id asc")
 		return db
 	}
 }
