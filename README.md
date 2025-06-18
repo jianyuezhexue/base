@@ -82,7 +82,7 @@ import "github.com/jianyuezhexue/base"
 
 // 2.定义业务模型并将baseModel组合进去
 type UserEntity struct {
-    base.BaseModel
+    base.BaseModel[UserEntity]
     Xxx sting `json:"xxx"` // 业务字段
 }
 
