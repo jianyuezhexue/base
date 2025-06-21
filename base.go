@@ -57,7 +57,7 @@ type BaseModelInterface[T any] interface {
 	CheckUniqueKeysExist(filedNames []string, values []string) (bool, error)                                                         // 检查唯一键是否重复
 	CheckUniqueKeysExistBatch(filedNames []string, values [][]string, withOutIds ...uint64) ([]bool, error)                          // 批量检查唯一键是否重复
 	MakeConditon(data any) func(db *gorm.DB) *gorm.DB                                                                                // 构造查询条件
-	ReInit(baseModel *BaseModel[T]) error                                                                                            // 重置模型中的Context和Db
+	ReInit(entity *T, baseModel *BaseModel[T]) error                                                                                 // 重置模型中的Context和Db
 	InitStateMachine(initStatus string, events []fsm.EventDesc, afterEvent fsm.Callback, callbacks ...map[string]fsm.Callback) error // 初始化状态机
 	EventExecution(initStatus, event, eventZhName string, args ...any) error                                                         // 执行事件
 }
@@ -355,15 +355,15 @@ func (b *BaseModel[T]) List(conds ...SearchCondition) ([]*T, error) {
 
 	// 组合查询条件
 	db := b.Db.Debug().
-		Scopes(b.DefaultSearchConditon).
-		Scopes(b.PermissionConditons...).
-		Scopes(conds...)
+		Scopes(b.DefaultSearchConditon).  // 默认条件
+		Scopes(b.PermissionConditons...). // 权限条件
+		Scopes(conds...)                  // 搜索条件
 
 	// 自定义排序规则
 	if b.CustomerOrder != "" {
-		db = db.Order(b.CustomerOrder)
+		db = db.Order(b.CustomerOrder) // 自定义排序
 	} else {
-		db = db.Order("id desc")
+		db = db.Order("id desc") // 默认排序
 	}
 
 	// 预加载查询
@@ -587,14 +587,14 @@ func (m *BaseModel[T]) MaxId() (int64, error) {
 }
 
 // 重置上下文和Db
-func (b *BaseModel[T]) ReInit(baseModel *BaseModel[T]) error {
+func (b *BaseModel[T]) ReInit(entity *T, baseModel *BaseModel[T]) error {
 	if b.Ctx == nil || b.Db == nil {
 		return fmt.Errorf("[ReInit]Context或DB为空,请开发检查")
 	}
-
 	baseModel.Ctx = b.Ctx
 	baseModel.Db = b.Db
 	baseModel.TableName = b.TableName
+	baseModel.EntityKey = fmt.Sprintf("%p", entity) // 实体指针地址
 	return nil
 }
 
