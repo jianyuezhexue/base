@@ -174,16 +174,6 @@ userEntity.Transaction(func(tx *gorm.DB) error {           // 开启事务
 })
 // 更多请参考 exampleLogic/ order_test.go
 
-
-
-
-
-
-
-
-
-
-
 // 调用自定义能力
 userEntity.Xxx() // 自定义业务能力
 
