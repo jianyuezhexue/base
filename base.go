@@ -48,7 +48,7 @@ type BaseModelInterface[T any] interface {
 	Count(conds ...SearchCondition) (int64, error)                                                                                   // 统计数据条数
 	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
 	ListByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) ([]*T, error)                                         // 根据业务编码查询列表数据
-	CountByBusinessCode(businessCode string) (int64, error)                                                                          // 根据业务编码统计数量
+	CountByBusinessCode(filedName, businessCode string) (int64, error)                                                               // 根据业务编码统计数量
 	MaxId() (int64, error)                                                                                                           // 获取最大ID
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeExist(filedName, businessCode string) (bool, error)                                                             // 检查业务编码是否重复
@@ -568,9 +568,9 @@ func (b *BaseModel[T]) ListByBusinessCode(filedName, filedValue string, preloads
 }
 
 // CountByBusinessCode 根据业务编码统计数量
-func (m *BaseModel[T]) CountByBusinessCode(businessCode string) (int64, error) {
+func (m *BaseModel[T]) CountByBusinessCode(filedName, businessCode string) (int64, error) {
 	var count int64
-	err := m.Db.Model(new(T)).Where("business_code = ?", businessCode).Count(&count).Error
+	err := m.Db.Model(new(T)).Where(fmt.Sprintf("%s = ?", filedName), businessCode).Count(&count).Error
 	if err != nil {
 		return 0, err
 	}
