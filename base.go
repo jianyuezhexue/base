@@ -47,6 +47,7 @@ type BaseModelInterface[T any] interface {
 	Repair() error                                                                                                                   // 修复数据
 	Count(conds ...SearchCondition) (int64, error)                                                                                   // 统计数据条数
 	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
+	ListByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                                                  // 根据Ids查询数据
 	ListByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) ([]*T, error)                                         // 根据业务编码查询列表数据
 	CountByBusinessCode(filedName, businessCode string) (int64, error)                                                               // 根据业务编码统计数量
 	MaxId() (int64, error)                                                                                                           // 获取最大ID
@@ -538,6 +539,29 @@ func (b *BaseModel[T]) GetByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, e
 	// 数据查询
 	dataList := []*T{}
 	err := db.Debug().Find(&dataList).Error
+	if err != nil {
+		return nil, err
+	}
+	return dataList, nil
+}
+
+// 根据Ids查询数据
+func (b *BaseModel[T]) ListByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error) {
+	// 预加载处理
+	db := b.Db
+	if len(preloads) > 0 {
+		for key, vals := range preloads[0] {
+			// 组合where条件和order条件
+			vals = append(vals, func(db *gorm.DB) *gorm.DB {
+				return db.Order("id asc")
+			})
+			db = db.Preload(key, vals...)
+		}
+	}
+
+	// 查询数据
+	dataList := make([]*T, 0)
+	err := db.Where("id in ?", Ids).Find(&dataList).Error
 	if err != nil {
 		return nil, err
 	}
