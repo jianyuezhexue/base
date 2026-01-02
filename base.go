@@ -53,7 +53,9 @@ type BaseModelInterface[T any] interface {
 	Validate() error                                                                                                                 // 数据校验
 	Complete() error                                                                                                                 // 完善数据
 	Create() (*T, error)                                                                                                             // 新增数据
+	CreateWithData(*T) (*T, error)                                                                                                   // 保存数据
 	Update() (*T, error)                                                                                                             // 更新数据
+	UpdateWithData(data *T) (*T, error)                                                                                              // 使用传入对象更新数据
 	LoadData(cond SearchCondition, preloads ...PreloadsType) (*T, error)                                                             // 加载数据
 	LoadById(id uint64, preloads ...PreloadsType) (*T, error)                                                                        // 根据Id加载数据
 	LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error)                                           // 根据业务编码查询数据
@@ -294,7 +296,7 @@ func (b *BaseModel[T]) SetData(data any) (*T, error) {
 	return entity, nil
 }
 
-// 创建数据
+// 创建数据 | 将自身作为存储对象
 func (b *BaseModel[T]) Create() (*T, error) {
 
 	// 读取业务实体 | 校验是否为空
@@ -318,7 +320,22 @@ func (b *BaseModel[T]) Create() (*T, error) {
 	return entity, nil
 }
 
-// 更新数据
+// 创建数据 | 使用传入对象作为存储对象
+func (b *BaseModel[T]) CreateWithData(data *T) (*T, error) {
+	// 执行创建操作
+	err := b.Tx().Omit(OmitUpdateFileds...).Create(data).Error
+	if err != nil {
+		return nil, err
+	}
+	// 记录日志
+	err = b.RecordLog(LogTypeCreate, "新增", new(T), data)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// 更新数据 | 将自身作为更新对象
 func (b *BaseModel[T]) Update() (*T, error) {
 	// 读取业务实体 | 校验是否为空
 	entity, err := b.GetCurrEntity()
@@ -341,6 +358,24 @@ func (b *BaseModel[T]) Update() (*T, error) {
 	}
 
 	return entity, nil
+}
+
+// 更新数据 | 使用传入对象作为更新对象
+func (b *BaseModel[T]) UpdateWithData(data *T) (*T, error) {
+	// 执行更新操作
+	session := &gorm.Session{FullSaveAssociations: true, Context: b.Db.Statement.Context}
+	err := b.Tx().Omit(OmitCreateFileds...).Session(session).Clauses(clause.OnConflict{UpdateAll: true}).Save(data).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 记录日志
+	// TODO 这里没有区分新旧数据，后续需要优化
+	err = b.RecordLog(LogTypeUpdate, "更新", data, data)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // 删除数据
