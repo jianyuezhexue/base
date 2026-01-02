@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,20 @@ type SearchCondition = func(db *gorm.DB) *gorm.DB
 type PreloadsType = map[string][]any
 type RecordLogFunc = func(ctx *gin.Context, operatorType, operatorTypeName string, oldData, newData any) error
 
+var safeColumnNameRegex = regexp.MustCompile(`^([a-zA-Z_][a-zA-Z0-9_]*)(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
+
+// 白名单校验列名，防止 filedName 被拼接进 SQL 时产生注入风险。
+// 允许格式: column 或 table.column（多段也允许），仅允许字母/数字/下划线/点。
+func validateSafeColumnName(column string) error {
+	if column == "" {
+		return fmt.Errorf("字段名不能为空")
+	}
+	if !safeColumnNameRegex.MatchString(column) {
+		return fmt.Errorf("字段名非法: %s", column)
+	}
+	return nil
+}
+
 // 充血模型基础接口
 type BaseModelInterface[T any] interface {
 	TableName() string                                                                                                               // 表名
@@ -49,7 +64,9 @@ type BaseModelInterface[T any] interface {
 	List(conds ...SearchCondition) ([]*T, error)                                                                                     // 查询列表数据
 	ListByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, error)                                                                  // 根据Ids查询数据
 	ListByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) ([]*T, error)                                         // 根据业务编码查询列表数据
-	CountByBusinessCode(filedName, businessCode string) (int64, error)                                                               // 根据业务编码统计数量
+	CountByBusinessCode(filedName, filedValue string) (int64, error)                                                                 // 根据业务编码统计数量
+	ListByBusinessCodes(filedName string, filedValues []string, preloads ...PreloadsType) ([]*T, error)                              // 根据业务编码列表查询数据
+	CountByBusinessCodes(filedName string, filedValues []string) (int64, error)                                                      // 根据业务编码列表统计数量
 	MaxId() (int64, error)                                                                                                           // 获取最大ID
 	Del(ids ...uint64) error                                                                                                         // 删除数据
 	CheckBusinessCodeExist(filedName, businessCode string) (bool, error)                                                             // 检查业务编码是否重复
@@ -456,6 +473,9 @@ func (b *BaseModel[T]) LoadById(id uint64, preloads ...PreloadsType) (*T, error)
 
 // 根据业务单号查询数据
 func (b *BaseModel[T]) LoadByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) (*T, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return nil, err
+	}
 	// 读取业务实体 | 校验是否为空
 	entity, err := b.GetCurrEntity()
 	if err != nil {
@@ -570,6 +590,9 @@ func (b *BaseModel[T]) ListByIds(Ids []uint64, preloads ...PreloadsType) ([]*T, 
 
 // 根据业务编码查询列表
 func (b *BaseModel[T]) ListByBusinessCode(filedName, filedValue string, preloads ...PreloadsType) ([]*T, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return nil, err
+	}
 	// 预加载处理
 	db := b.Db
 	if len(preloads) > 0 {
@@ -591,10 +614,59 @@ func (b *BaseModel[T]) ListByBusinessCode(filedName, filedValue string, preloads
 	return list, nil
 }
 
+// 根据业务编码列表查询列表
+func (b *BaseModel[T]) ListByBusinessCodes(filedName string, filedValues []string, preloads ...PreloadsType) ([]*T, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return nil, err
+	}
+	if len(filedValues) == 0 {
+		return nil, fmt.Errorf("ListByBusinessCodes查询,业务编码列表不能为空")
+	}
+
+	// 预加载处理
+	db := b.Db
+	if len(preloads) > 0 {
+		for key, vals := range preloads[0] {
+			// 组合where条件和order条件
+			vals = append(vals, func(db *gorm.DB) *gorm.DB {
+				return db.Order("id asc")
+			})
+			db = db.Preload(key, vals...)
+		}
+	}
+
+	// filedValues 为空时，避免生成 in () 的无效 SQL
+	list := make([]*T, 0)
+	err := db.Where(fmt.Sprintf("%s in ?", filedName), filedValues).Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // CountByBusinessCode 根据业务编码统计数量
-func (m *BaseModel[T]) CountByBusinessCode(filedName, businessCode string) (int64, error) {
+func (m *BaseModel[T]) CountByBusinessCode(filedName, filedValue string) (int64, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return 0, err
+	}
 	var count int64
-	err := m.Db.Model(new(T)).Where(fmt.Sprintf("%s = ?", filedName), businessCode).Count(&count).Error
+	err := m.Db.Model(new(T)).Where(fmt.Sprintf("%s = ?", filedName), filedValue).Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// CountByBusinessCodes 根据业务编码列表统计数量
+func (m *BaseModel[T]) CountByBusinessCodes(filedName string, filedValues []string) (int64, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return 0, err
+	}
+	if len(filedValues) == 0 {
+		return 0, fmt.Errorf("CountByBusinessCodes查询,业务编码列表不能为空")
+	}
+	var count int64
+	err := m.Db.Model(new(T)).Where(fmt.Sprintf("%s in ?", filedName), filedValues).Count(&count).Error
 	if err != nil {
 		return 0, err
 	}
@@ -628,6 +700,9 @@ func (b *BaseModel[T]) ReInit(entity *T, baseModel *BaseModel[T]) error {
 // 如果当前业务实体Id存在(意味着当前数据已经落库,会跳过当前)
 // true 存在 false 不存在
 func (b *BaseModel[T]) CheckBusinessCodeExist(filedName, businessCode string) (bool, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return true, err
+	}
 	ids := []uint64{}
 	err := b.Db.Model(new(T)).Select("id").Where(fmt.Sprintf("%s = ?", filedName), businessCode).Find(&ids).Error
 	if err != nil {
@@ -663,6 +738,9 @@ func (b *BaseModel[T]) BusinessCodeCannotRepeat(filedName, businessCode string) 
 
 // 批量校验业务数据是否存在
 func (b *BaseModel[T]) CheckBusinessCodesExist(filedName string, values []string) (map[int]bool, error) {
+	if err := validateSafeColumnName(filedName); err != nil {
+		return nil, err
+	}
 	res := make(map[int]bool)
 
 	// 查询DB数据
